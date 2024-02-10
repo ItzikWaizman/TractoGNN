@@ -1,24 +1,21 @@
 import torch
-import random
-import numpy as np
 import nibabel as nib
 from nibabel import streamlines
-from dipy.io import read_bvals_bvecs
 from utils.data_utils import *
 class SubjectDataHandler(object):
     def __init__(self, subject_folder):
         self.paths_dictionary = extract_subject_paths(subject_folder)
-        self.bvals, self.bvecs = read_bvals_bvecs(self.paths_dictionary['bval'], self.paths_dictionary['bvec'])
         self.wm_mask = self.load_mask()
         self.tractogram = self.load_tractogram()
-        self.dwi = self.load_dwi()
+        self.dwi, self.affine = self.load_dwi()
         self.dwi_means = self.calc_means(self.dwi)
 
     def load_dwi(self):
         sh_data = nib.load(self.paths_dictionary['sh'])
+        affine = sh_data.affine
         sh_data = torch.tensor(sh_data.get_fdata(), dtype=torch.float32)
-        dwi_data = resample_dwi(sh_data)
-        return dwi_data
+        dwi_data = 255 * resample_dwi(sh_data)
+        return dwi_data, affine
 
     def calc_means(self, dwi):
         DW_means = torch.zeros(dwi.shape[3])

@@ -2,8 +2,8 @@ import os
 import glob
 import torch
 from dipy.data import get_sphere
-from dipy.core.sphere import Sphere, HemiSphere
-from dipy.reconst.shm import sph_harm_lookup, smooth_pinv
+from dipy.core.sphere import Sphere
+from dipy.reconst.shm import sph_harm_lookup
 
 def extract_subject_paths(subject_folder):
     # Check if the subject folder exists
@@ -13,8 +13,6 @@ def extract_subject_paths(subject_folder):
 
     # Extract bvals, bvecs, and dwi_data paths
     dwi_folder = os.path.join(subject_folder, "dwi")
-    bval_path = glob.glob(os.path.join(dwi_folder, "*.bval"))[0]
-    bvec_path = glob.glob(os.path.join(dwi_folder, "*.bvec"))[0]
     dwi_data_path = glob.glob(os.path.join(dwi_folder, "*dwi.nii*"))[0]
 
     # Extract white matter mask path
@@ -30,8 +28,6 @@ def extract_subject_paths(subject_folder):
 
     # Return the extracted paths
     return {
-        "bval": bval_path,
-        "bvec": bvec_path,
         "dwi_data": dwi_data_path,
         "wm_mask": wm_mask_path,
         "tractography_folder": tractography_folder,
@@ -50,3 +46,23 @@ def resample_dwi(data_sh):
     Ba = torch.tensor(Ba, dtype=torch.float32)
     data_resampled = torch.matmul(data_sh, Ba.t())
     return data_resampled
+
+def ras_to_voxel(ras_coords, affine):
+    inverse_affine = np.linalg.inv(affine)
+
+    # Add a 1 for homogeneous coordinates
+    ras_homogeneous = np.append(ras_coords, 1)
+    voxel_coords_homogeneous = np.dot(inverse_affine, ras_homogeneous)
+
+    # Remove the homogeneous coordinate and round to get voxel indices
+    voxel_coords = np.round(voxel_coords_homogeneous[:3]).astype(int)
+    return voxel_coords
+
+def voxel_to_ras(voxel_indices, affine):
+    # Add a 1 for homogeneous coordinates
+    voxel_homogeneous = np.append(voxel_indices, 1)
+    ras_coords_homogeneous = np.dot(affine, voxel_homogeneous)
+
+    # The result is already in RAS+ space; no need to round
+    ras_coords = ras_coords_homogeneous[:3]
+    return ras_coords
