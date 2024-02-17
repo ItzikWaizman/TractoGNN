@@ -1,6 +1,7 @@
 import os
 import glob
 import torch
+import numpy as np
 from dipy.data import get_sphere
 from dipy.core.sphere import Sphere
 from dipy.reconst.shm import sph_harm_lookup
@@ -47,22 +48,26 @@ def resample_dwi(data_sh):
     data_resampled = torch.matmul(data_sh, Ba.t())
     return data_resampled
 
-def ras_to_voxel(ras_coords, affine):
-    inverse_affine = np.linalg.inv(affine)
+def ras_to_voxel(ras_coords, inverse_affine):
+    # Append a column of ones for homogeneous coordinates
+    ones_column = np.ones((ras_coords.shape[0], 1), dtype=np.float32)
+    ras_homogeneous = np.hstack((ras_coords, ones_column))
 
-    # Add a 1 for homogeneous coordinates
-    ras_homogeneous = np.append(ras_coords, 1)
-    voxel_coords_homogeneous = np.dot(inverse_affine, ras_homogeneous)
+    # Apply inverse affine transformation to convert RAS to voxel coordinates
+    voxel_coords_homogeneous = np.dot(ras_homogeneous, inverse_affine.T)
 
-    # Remove the homogeneous coordinate and round to get voxel indices
-    voxel_coords = np.round(voxel_coords_homogeneous[:3]).astype(int)
+    # Remove homogeneous coordinate and round to get voxel indices
+    voxel_coords = np.round(voxel_coords_homogeneous[:, :3]).astype(np.int)
     return voxel_coords
 
 def voxel_to_ras(voxel_indices, affine):
     # Add a 1 for homogeneous coordinates
-    voxel_homogeneous = np.append(voxel_indices, 1)
-    ras_coords_homogeneous = np.dot(affine, voxel_homogeneous)
+    ones_column = torch.ones(voxel_indices.shape[0], 1, dtype=torch.float32)
+    voxel_homogeneous = torch.cat((voxel_indices, ones_column), dim=1)
 
-    # The result is already in RAS+ space; no need to round
-    ras_coords = ras_coords_homogeneous[:3]
+    # Perform affine transformation
+    ras_coords_homogeneous = torch.matmul(affine, voxel_homogeneous.T).T
+
+    ras_coords = ras_coords_homogeneous[:, :3]
     return ras_coords
+
