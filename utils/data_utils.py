@@ -6,6 +6,7 @@ from dipy.data import get_sphere
 from dipy.core.sphere import Sphere
 from dipy.reconst.shm import sph_harm_lookup
 
+
 def extract_subject_paths(subject_folder):
     # Check if the subject folder exists
     if not os.path.exists(subject_folder):
@@ -13,8 +14,8 @@ def extract_subject_paths(subject_folder):
         return None
 
     # Extract bvals, bvecs, and dwi_data paths
-    dwi_folder = os.path.join(subject_folder, "dwi")
-    dwi_data_path = glob.glob(os.path.join(dwi_folder, "*dwi.nii*"))[0]
+    # dwi_folder = os.path.join(subject_folder, "dwi")
+    # dwi_data_path = glob.glob(os.path.join(dwi_folder, "*dwi.nii*"))[0]
 
     # Extract white matter mask path
     mask_folder = os.path.join(subject_folder, "mask")
@@ -29,11 +30,12 @@ def extract_subject_paths(subject_folder):
 
     # Return the extracted paths
     return {
-        "dwi_data": dwi_data_path,
+        # "dwi_data": dwi_data_path,
         "wm_mask": wm_mask_path,
         "tractography_folder": tractography_folder,
         "sh": sh_path
     }
+
 
 def resample_dwi(data_sh):
     # Resamples a diffusion signal according to a set of directions using spherical harmonics.
@@ -48,6 +50,7 @@ def resample_dwi(data_sh):
     data_resampled = torch.matmul(data_sh, Ba.t())
     return data_resampled
 
+
 def ras_to_voxel(ras_coords, inverse_affine):
     # Append a column of ones for homogeneous coordinates
     ones_column = np.ones((ras_coords.shape[0], 1), dtype=np.float32)
@@ -57,8 +60,9 @@ def ras_to_voxel(ras_coords, inverse_affine):
     voxel_coords_homogeneous = np.dot(ras_homogeneous, inverse_affine.T)
 
     # Remove homogeneous coordinate and round to get voxel indices
-    voxel_coords = np.round(voxel_coords_homogeneous[:, :3]).astype(np.int)
+    voxel_coords = np.round(voxel_coords_homogeneous[:, :3]).astype(int)
     return voxel_coords
+
 
 def voxel_to_ras(voxel_indices, affine):
     # Add a 1 for homogeneous coordinates
@@ -71,3 +75,14 @@ def voxel_to_ras(voxel_indices, affine):
     ras_coords = ras_coords_homogeneous[:, :3]
     return ras_coords
 
+
+def filter_tuples(tuples_set):
+    filtered_set = set()
+
+    for tup in tuples_set:
+        reverse_tup = (tup[1], tup[0])
+
+        if tup not in filtered_set and reverse_tup not in filtered_set and tup[0] != tup[1]:
+            filtered_set.add(tup)
+
+    return filtered_set

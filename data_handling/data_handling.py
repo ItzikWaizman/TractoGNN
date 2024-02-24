@@ -7,6 +7,8 @@ from nibabel import streamlines
 from torch_geometric.data import Data
 from torch_geometric.utils.convert import to_networkx
 from utils.data_utils import *
+from config import *
+
 
 class SubjectDataHandler(object):
     def __init__(self, subject_folder):
@@ -91,3 +93,52 @@ class SubjectDataHandler(object):
 
         edge_index = torch.tensor(list(edge_index_set)).T
         return Data(x=node_feature_matrix, edge_index=edge_index)
+
+    def create_training_graph(self, radius):
+        # Create node feature matrix
+        #TODO: Decide if we should expand white matter mask. wm_mask = self.expand_white_matter_mask(self.wm_mask)
+        wm_mask = self.wm_mask
+        node_feature_matrix = self.dwi[wm_mask == 1]
+
+        # Create a map between row index (node index) and the corresponding ras coordinates
+        voxel_indices = torch.nonzero(wm_mask)
+        position_to_index = {(row[0].item(), row[1].item(), row[2].item()): i for i, row in enumerate(voxel_indices)}
+
+        # Create Edge matrix
+        edge_index_set = set()
+        for row, i in position_to_index.items():
+
+            dims = [np.linspace(row[i] - radius, row[i] + radius, 2 * radius + 1) for i in range(3)]
+            mesh = np.meshgrid(*dims)
+            neighbors = np.concatenate((mesh[0].reshape(-1, 1), mesh[1].reshape(-1, 1),
+                                       mesh[2].reshape(-1, 1)), axis=1).astype(int)
+            target_nodes = [position_to_index.get(tuple(neighbor), -1) for neighbor in neighbors]
+            target_nodes = [index for index in target_nodes if index != -1]
+
+            if target_nodes:
+                src_nodes = [i for _ in target_nodes]
+                edge_index_set.update(zip(src_nodes, target_nodes))
+
+        edge_index_set = filter_tuples(edge_index_set)
+        edge_index = torch.tensor(list(edge_index_set)).T
+        return Data(x=node_feature_matrix, edge_index=edge_index)
+
+
+def create_torch_data():
+    raw_data_dir = os.path.join(DATA_DIR, 'Raw')
+    torch_data_dir = os.path.join(DATA_DIR, 'TorchData')
+    subjects = os.listdir(raw_data_dir)
+    for subject in subjects:
+        subject_raw_data_dir = os.path.join(raw_data_dir, subject)
+        subject_torch_data_dir = os.path.join(torch_data_dir, subject)
+        if not os.path.exists(subject_torch_data_dir):
+            os.makedirs(subject_torch_data_dir)
+            subject_data_handler = SubjectDataHandler(subject_raw_data_dir)
+            gt_graph = subject_data_handler.create_ground_truth_graph()
+            training_graph = subject_data_handler.create_training_graph(TRAIN_CONNECT_RADIUS)
+            torch.save(gt_graph, os.path.join(subject_torch_data_dir, "gt_graph.pt"))
+            torch.save(training_graph, os.path.join(subject_torch_data_dir, "training_graph.pt"))
+
+
+if __name__ == "__main__":
+    create_torch_data()
