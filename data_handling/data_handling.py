@@ -1,18 +1,14 @@
-import torch
-import numpy as np
 import nibabel as nib
-import time
 from torch.nn.functional import conv3d
 from nibabel import streamlines
 from torch_geometric.data import Data
-from torch_geometric.utils.convert import to_networkx
 from utils.data_utils import *
 from config import *
 
 
 class SubjectDataHandler(object):
     def __init__(self, subject_folder):
-        #TODO: Do not hold wm_mask, tractogram and dwi on RAM. All we need is the graph representation.
+        # TODO: Do not hold wm_mask, tractogram and dwi on RAM. All we need is the graph representation.
         self.paths_dictionary = extract_subject_paths(subject_folder)
         self.wm_mask = self.load_mask()
         self.tractogram = self.load_tractogram()
@@ -57,7 +53,8 @@ class SubjectDataHandler(object):
         mask = torch.tensor(mask.get_fdata(), dtype=torch.float32)
         return mask
 
-    def expand_white_matter_mask(self, white_matter_mask, radius=1):
+    @staticmethod
+    def expand_white_matter_mask(white_matter_mask, radius=1):
         # Define a 3D kernel with a cube shape to capture neighboring voxels within the specified radius
         kernel_size = 2 * radius + 1
         kernel = torch.ones(kernel_size, kernel_size, kernel_size, dtype=torch.bool)
@@ -69,9 +66,9 @@ class SubjectDataHandler(object):
 
         return expanded_mask
 
-    def create_ground_truth_graph(self):
+    def create_ground_truth_graph(self, filter_connections=False):
         # Create node feature matrix
-        #TODO: Decide if we should expand white matter mask. wm_mask = self.expand_white_matter_mask(self.wm_mask)
+        # TODO: Decide if we should expand white matter mask. wm_mask = self.expand_white_matter_mask(self.wm_mask)
         wm_mask = self.wm_mask
         node_feature_matrix = self.dwi[wm_mask == 1]
 
@@ -91,12 +88,14 @@ class SubjectDataHandler(object):
             target_nodes = streamline_indices[1:]
             edge_index_set.update(zip(src_nodes, target_nodes))
 
+        if filter_connections:
+            edge_index_set = filter_tuples(edge_index_set)
         edge_index = torch.tensor(list(edge_index_set)).T
         return Data(x=node_feature_matrix, edge_index=edge_index)
 
-    def create_training_graph(self, radius):
+    def create_training_graph(self, radius, filter_connections=False):
         # Create node feature matrix
-        #TODO: Decide if we should expand white matter mask. wm_mask = self.expand_white_matter_mask(self.wm_mask)
+        # TODO: Decide if we should expand white matter mask. wm_mask = self.expand_white_matter_mask(self.wm_mask)
         wm_mask = self.wm_mask
         node_feature_matrix = self.dwi[wm_mask == 1]
 
@@ -119,23 +118,23 @@ class SubjectDataHandler(object):
                 src_nodes = [i for _ in target_nodes]
                 edge_index_set.update(zip(src_nodes, target_nodes))
 
-        edge_index_set = filter_tuples(edge_index_set)
+        if filter_connections:
+            edge_index_set = filter_tuples(edge_index_set)
         edge_index = torch.tensor(list(edge_index_set)).T
         return Data(x=node_feature_matrix, edge_index=edge_index)
 
 
 def create_torch_data():
-    raw_data_dir = os.path.join(DATA_DIR, 'Raw')
-    torch_data_dir = os.path.join(DATA_DIR, 'TorchData')
-    subjects = os.listdir(raw_data_dir)
+    subjects = os.listdir(RAW_DATA_DIR)
     for subject in subjects:
-        subject_raw_data_dir = os.path.join(raw_data_dir, subject)
-        subject_torch_data_dir = os.path.join(torch_data_dir, subject)
+        subject_raw_data_dir = os.path.join(RAW_DATA_DIR, subject)
+        subject_torch_data_dir = os.path.join(TORCH_DATA_DIR, subject)
         if not os.path.exists(subject_torch_data_dir):
             os.makedirs(subject_torch_data_dir)
             subject_data_handler = SubjectDataHandler(subject_raw_data_dir)
-            gt_graph = subject_data_handler.create_ground_truth_graph()
-            training_graph = subject_data_handler.create_training_graph(TRAIN_CONNECT_RADIUS)
+            gt_graph = subject_data_handler.create_ground_truth_graph(filter_connections=FILTER_GT_CON)
+            training_graph = subject_data_handler.create_training_graph(radius=TRAIN_CONNECT_RADIUS,
+                                                                        filter_connections=FILTER_TRAIN_CON)
             torch.save(gt_graph, os.path.join(subject_torch_data_dir, "gt_graph.pt"))
             torch.save(training_graph, os.path.join(subject_torch_data_dir, "training_graph.pt"))
 
