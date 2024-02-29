@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
-import torch_geometric.transforms as transforms
 from torch_geometric.nn import GCNConv
-from torch_geometric.utils import train_test_split_edges
+from torch.nn import Parameter
+from utils.trainer_utils import FEATURE_DIMS
 
 
 class GCNAutoencoder(nn.Module):
@@ -12,6 +12,8 @@ class GCNAutoencoder(nn.Module):
         self.conv_layers = nn.ModuleList([GCNConv(feature_dimensions[i], feature_dimensions[i+1])
                                           for i in range(self.num_layers)])
         self.activation = nn.ReLU()
+        self.rel_emb = Parameter(torch.empty(1, FEATURE_DIMS[-1]))
+        torch.nn.init.xavier_uniform_(self.rel_emb)
 
     def encode(self, input_graph):
         x = input_graph.x
@@ -20,13 +22,7 @@ class GCNAutoencoder(nn.Module):
             x = self.activation(self.conv_layers[layer_idx](x, edge_index))
         return x
 
-    @staticmethod
-    def decode(z, pos_edge_index, neg_edge_index):
-        edge_index = torch.cat([pos_edge_index, neg_edge_index], dim=-1)
-        logits = (z[edge_index[0]] * z[edge_index[1]]).sum(dim=-1)
+    def decode(self, z, edge_index):
+        logits = (z[edge_index[0]] * self.rel_emb * z[edge_index[1]]).sum(dim=-1)
         return logits
 
-    @staticmethod
-    def decode_all(z):
-        prob_adj = z @ z.t()
-        return (prob_adj > 0).nonzero(as_tuple=False).t()

@@ -1,6 +1,5 @@
 from torch_geometric.data import Data
 from torch_geometric.utils import negative_sampling
-
 from trainers.gnn_trainer import GNNTrainer
 from models.gcn_autoencoder import GCNAutoencoder
 from utils.trainer_utils import get_link_labels
@@ -22,10 +21,16 @@ class GCNAETrainer(GNNTrainer):
         self.train_dataloader = None
         self.test_dataloader = None
 
-    def forward(self, input_graph: Data) -> torch.Tensor:
+    def forward(self, input_graph: Data, candidate_edge_index: torch.Tensor = None) -> torch.Tensor:
 
         z = self.network.encode(input_graph)
-        return z
+
+        if candidate_edge_index is None:
+            link_logits = None
+        else:
+            link_logits = self.network.decode(z, candidate_edge_index)
+
+        return link_logits
 
     def evaluate(self) -> float:
         pass
@@ -36,14 +41,14 @@ class GCNAETrainer(GNNTrainer):
         loss = 0
         for input_graph, gt_graph in zip(input_graphs, gt_graphs):
 
-            z = self.forward(input_graph)
-
             neg_edge_index = negative_sampling(
                 edge_index=gt_graph.edge_index,
                 num_nodes=gt_graph.num_nodes,
                 num_neg_samples=gt_graph.edge_index.size(1))
 
-            link_logits = self.network.decode(z, gt_graph.edge_index, neg_edge_index)
+            edge_index = torch.cat([gt_graph.edge_index, neg_edge_index], dim=-1)
+
+            link_logits = self.forward(input_graph, edge_index)
             link_labels = get_link_labels(gt_graph.edge_index, neg_edge_index)
 
             loss = loss + self.criterion(link_logits, link_labels)

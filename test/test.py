@@ -11,6 +11,9 @@ if __name__ == "__main__":
     training_graph = torch.load(os.path.join(TORCH_DATA_DIR, "1013", "training_graph.pt")).to(DEVICE)
 
     gcn_trainer = GCNAETrainer()
+    print("Model:")
+    print(gcn_trainer.network.parameters)
+    print(f"Number of parameters: {sum(p.numel() for p in gcn_trainer.network.parameters())}")
     losses = []
 
     for i in tqdm(range(TRAINING_EPOCHS)):
@@ -23,3 +26,5 @@ if __name__ == "__main__":
     plt.ylabel("Binary Cross Entropy with Logits Loss")
     plt.title("Learning Curve: GT Graph Reconstruction Loss")
     plt.savefig("LearningCurve")
+
+    torch.save(gcn_trainer.network.to("cpu").state_dict(), "model_emb.pt")
