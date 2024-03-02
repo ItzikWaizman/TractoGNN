@@ -67,12 +67,10 @@ class SubjectDataHandler(object):
         return expanded_mask
 
     def create_ground_truth_graph(self, filter_connections=False):
-        # Create node feature matrix
         # TODO: Decide if we should expand white matter mask. wm_mask = self.expand_white_matter_mask(self.wm_mask)
         wm_mask = self.wm_mask
-        node_feature_matrix = self.dwi[wm_mask == 1]
 
-        # Create a map between row index (node index) and the corresponding ras coordinates
+        # Create a map between row index (node index) and the corresponding voxel position
         voxel_indices = torch.nonzero(wm_mask)
         position_to_index = {(row[0].item(), row[1].item(), row[2].item()): i for i, row in enumerate(voxel_indices)}
 
@@ -91,26 +89,29 @@ class SubjectDataHandler(object):
         if filter_connections:
             edge_index_set = filter_tuples(edge_index_set)
         edge_index = torch.tensor(list(edge_index_set)).T
-        return Data(x=node_feature_matrix, edge_index=edge_index)
+        return Data(edge_index=edge_index)
 
     def create_training_graph(self, radius, filter_connections=False):
-        # Create node feature matrix
         # TODO: Decide if we should expand white matter mask. wm_mask = self.expand_white_matter_mask(self.wm_mask)
         wm_mask = self.wm_mask
-        node_feature_matrix = self.dwi[wm_mask == 1]
-
-        # Create a map between row index (node index) and the corresponding ras coordinates
         voxel_indices = torch.nonzero(wm_mask)
+
+        # Create node feature matrix
+        node_ras_coordinates = voxel_to_ras(voxel_indices, torch.tensor(self.affine, dtype=torch.float32))
+        node_feature_matrix = torch.cat((self.dwi[wm_mask == 1], node_ras_coordinates), dim=1)
+
+        # Create a map between row index (node index) and the corresponding voxel position
         position_to_index = {(row[0].item(), row[1].item(), row[2].item()): i for i, row in enumerate(voxel_indices)}
 
         # Create Edge matrix
         edge_index_set = set()
+        edge_attr_list = []
         for row, i in position_to_index.items():
 
-            dims = [np.linspace(row[i] - radius, row[i] + radius, 2 * radius + 1) for i in range(3)]
+            dims = [np.linspace(row[j] - radius, row[j] + radius, 2 * radius + 1) for j in range(3)]
             mesh = np.meshgrid(*dims)
             neighbors = np.concatenate((mesh[0].reshape(-1, 1), mesh[1].reshape(-1, 1),
-                                       mesh[2].reshape(-1, 1)), axis=1).astype(int)
+                                        mesh[2].reshape(-1, 1)), axis=1).astype(int)
             target_nodes = [position_to_index.get(tuple(neighbor), -1) for neighbor in neighbors]
             target_nodes = [index for index in target_nodes if index != -1]
 
@@ -118,11 +119,17 @@ class SubjectDataHandler(object):
                 src_nodes = [i for _ in target_nodes]
                 edge_index_set.update(zip(src_nodes, target_nodes))
 
+                # Weight the edges with the distance in RAS space
+                src_ras = node_ras_coordinates[i]
+                target_ras = node_ras_coordinates[target_nodes]
+                distances = torch.norm(src_ras - target_ras, dim=1)
+                edge_attr_list.extend(distances.tolist())
+
         if filter_connections:
             edge_index_set = filter_tuples(edge_index_set)
         edge_index = torch.tensor(list(edge_index_set)).T
-        return Data(x=node_feature_matrix, edge_index=edge_index)
-
+        edge_attr = torch.tensor(edge_attr_list)
+        return Data(x=node_feature_matrix, edge_index=edge_index, edge_attr=edge_attr)
 
 def create_torch_data():
     subjects = os.listdir(RAW_DATA_DIR)
