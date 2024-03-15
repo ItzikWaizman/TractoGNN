@@ -40,7 +40,7 @@ class TractoGNN(nn.Module):
         # Use Linear network as a decoder.
         self.decoder = nn.Linear(self.latent_space_dim, self.output_size)
         
-    def forward(self, input_graph, node_sequence_batch, sequence_lengths):
+    def forward(self, input_graph, node_sequence_batch, padding_mask, casuality_mask):
         """
         node_sequence_batch - Tensor of shape [seqence_len, batch_size].
         sequence_lengths - the actual lengths of any sequence in the batch.
@@ -56,8 +56,7 @@ class TractoGNN(nn.Module):
         node_features_batch = self.positional_encoding(node_features_batch) 
         
         # Process sequence with TransformerEncoder
-        attention_mask = create_attention_mask(sequence_lengths, node_features_batch.size(0))
-        encoded_sequence = self.transformer_encoder(node_features_batch, src_key_padding_mask=attention_mask) 
+        encoded_sequence = self.transformer_encoder(node_features_batch, src_mask=casuality_mask, src_key_padding_mask=padding_mask) 
         
         output_sequences = self.decoder(encoded_sequence)
         probabilities = F.log_softmax(output_sequences, dim=-1)

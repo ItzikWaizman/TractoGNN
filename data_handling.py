@@ -16,6 +16,7 @@ class SubjectDataHandler(object):
         self.dwi_means = self.calc_means(self.dwi)
         self.train_loader, self.valid_loader = self.create_dataloaders(batch_size=params['batch_size'])
         self.graph = self.create_connected_graph(params['subject_folder'])
+        self.casuality_mask = torch.nn.Transformer.generate_square_subsequent_mask(self.tractogram.size(1))
         
     def get_voxel_index_maps(self):
         # Create a map between node index to white matter voxel.
@@ -115,7 +116,7 @@ class StreamlineDataset(Dataset):
         self.lengths = lengths
         self.index_to_voxel = index_to_voxel
         self.cube_size = cube_size
-        self.relative_positions = self.calculate_rel_positions() 
+        self.relative_positions = self.calculate_rel_positions()
 
     def calculate_rel_positions(self):
         offset = self.cube_size // 2
@@ -142,8 +143,8 @@ class StreamlineDataset(Dataset):
         streamline_voxels = self.index_to_voxel[streamline]
         seq_length = self.lengths[idx]  
         label = generate_labels_for_streamline(streamline_voxels, self.relative_positions)
-        
-        return streamline, label, seq_length
+        bool_mask = torch.arange(streamline.size(0)) >= seq_length
+        return streamline, label, seq_length, bool_mask
 
 
 
