@@ -1,21 +1,74 @@
-import os
 import torch
 
-# directory  definitions
-ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = os.path.join(ROOT_DIR, 'data')
-RAW_DATA_DIR = os.path.join(DATA_DIR, 'Raw')
-TORCH_DATA_DIR = os.path.join(DATA_DIR, 'TorchData')
-DATA_HANDLING_DIR = os.path.join(ROOT_DIR, 'data_handling')
-MODELS_DIR = os.path.join(ROOT_DIR, 'models')
-RESULTS_DIR = os.path.join(ROOT_DIR, 'results')
-UTILS_DIR = os.path.join(ROOT_DIR, 'utils')
+class Parameters(object):
 
-# parameters
-TRAIN_CONNECT_RADIUS = 1
-FILTER_GT_CON = False
-FILTER_TRAIN_CON = False
-LR = 5e-4
-TRAINING_EPOCHS = 50
-FEATURE_DIMS = [100, 50, 25, 10]
-DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    def __init__(self):
+        self.params = dict()
+
+        """ Model Parameters """
+
+        # encoder_feature_dims - GCN encoder feature dimensions in each layer. Number of layers determined by len(encoder_feature_dims)-1.
+        self.params['graph_encoder_feature_dims'] = [203, 164, 128, 64, 32]
+
+        # num_transformer_encoder_layers - Number of transformer encoder layers will be used for TractoGNN decoder.
+        self.params['num_transformer_encoder_layers'] = 3
+
+        # nhead - Number of heads in the Multi Head Self Attention mechanism of the TransformerEncoderLayer.
+        self.params['nhead'] = 8
+
+        # transformer_feed_forward_dim - Dimension of the feedforward network in TransformerEncoder layer.
+        self.params['transformer_feed_forward_dim'] = 256
+
+        # dropout_rate - Probability to execute a dropout
+        self.params['dropout_rate'] = 0.3
+
+        # max_streamline_len - Upper bound of an expected streamline length. Used for positional encoding.
+        self.params['max_streamline_len'] = 250
+
+        # output_size - Decoder output features size.
+        self.params['output_size'] = 730
+
+        # model_weights_save_dir - (string) Path for saving the model's files after training is done.
+        self.params['model_weights_save_dir'] = ""
+
+        """ Training Parameters """
+
+        # learning_rate -(float) Initial learning rate in training phase.
+        self.params['learning_rate'] = 5e-4
+
+        # batch_size - (int) Data batch size for training.
+        self.params['batch_size'] = 500
+
+        # epochs - (int) Number of training epochs.
+        self.params['epochs'] = 50
+
+        # decay_LR - (bool) Whether to use learning rate decay.
+        self.params['decay_LR'] = True
+
+        # decay_LR_patience - (int) Number of training epochs to wait in case validation performance does not improve
+        # before learning rate decay is applied.
+        self.params['decay_LR_patience'] = 2
+
+        # decay_factor - (float [0, 1]) In an LR decay step, the existing LR will be multiplied by this factor.
+        self.params['decay_factor'] = 0.6
+
+        # early_stopping - (bool) Whether to use early stopping.
+        self.params['early_stopping'] = True
+
+        # early_stopping - (int) Number of epochs to wait before training is terminated when validation performance
+        # does not improve.
+        self.params['early_stopping_patience'] = 5
+
+        # train_val_ratio - (float [0, 1]) Training/Validation split ratio for training.
+        self.params['train_val_ratio'] = 0.8
+
+        # device - Device for training, GPU if available and otherwise CPU.
+        self.params['device'] = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+        """ Data Parameters """
+
+        # subject_folder - (string) Path to subject folder containing diffusion weighted image, white matter mask, 
+        # spherical harmonics coefficients and reference tractograms.
+        self.params['subject_folder'] = 'sub-1013'
+       
+    

@@ -3,9 +3,8 @@ import glob
 import torch
 import numpy as np
 from dipy.data import get_sphere
-from dipy.core.sphere import Sphere
 from dipy.reconst.shm import sph_harm_lookup
-
+from nibabel import streamlines
 
 def extract_subject_paths(subject_folder):
     # Check if the subject folder exists
@@ -39,7 +38,7 @@ def extract_subject_paths(subject_folder):
 
 def resample_dwi(data_sh):
     # Resamples a diffusion signal according to a set of directions using spherical harmonics.
-    sphere = get_sphere('repulsion100')
+    sphere = get_sphere('repulsion200')
     sph_harm_basis = sph_harm_lookup.get("tournier07")
 
     # TractInferno dataset includes spherical harmonics coefficients up to order 6.
@@ -86,3 +85,95 @@ def filter_tuples(tuples_set):
             filtered_set.add(tup)
 
     return filtered_set
+
+
+def load_tractogram(tractography_folder):
+    folder_path = tractography_folder
+
+    # Get a list of all .trk files in the specified folder
+    trk_files = [file for file in os.listdir(folder_path) if file.endswith(".trk")]
+
+    merged_streamlines = []
+    # Iterate over the .trk files and merge them
+    for trk_file in trk_files:
+        current_tractogram = streamlines.load(os.path.join(folder_path, trk_file))
+        merged_streamlines.extend(current_tractogram.streamlines)
+
+    return merged_streamlines
+
+def prepare_streamlines_for_training(subject, save_dir_name="torch_streamlines", save_filename="streamlines.pt"):
+    """
+    Prepares and saves streamlines for training, or loads them if already saved.
+
+    Parameters:
+    - subject - SubjectDataHandler object.
+    - save_dir: Directory where the tensor and lengths will be saved.
+    - save_filename: Filename for saving the tensor and lengths.
+    """
+
+    save_dir = os.path.join(subject.paths_dictionary['tractography_folder'], save_dir_name)
+    save_path = os.path.join(save_dir, save_filename)
+
+    if os.path.exists(save_path):
+        data = torch.load(save_path)
+        return data['padded_streamlines_tensor'], data['lengths']
+
+    # If the data does not exist, proceed to load and process the streamlines
+    os.makedirs(save_dir, exist_ok=True)
+    
+    # Prepare streamlines and lengths
+    np_streamlines = load_tractogram(subject.paths_dictionary['tractography_folder'])
+    processed_streamlines = []
+    for streamline in np_streamlines:
+        streamline_voxels = ras_to_voxel(streamline, subject.inverse_affine)
+        streamline_indices = [subject.voxel_to_index_dic.get(tuple(pos.tolist()), -1) for pos in streamline_voxels]
+        streamline_indices = [index for index in streamline_indices if index != -1]
+        processed_streamlines.append(streamline_indices)
+
+    max_seq_len = max(len(sl) for sl in processed_streamlines)
+    padded_streamlines = [sl + [0]*(max_seq_len - len(sl)) for sl in processed_streamlines]
+    padded_streamlines_tensor = torch.tensor(padded_streamlines, dtype=torch.int)
+    lengths = torch.tensor([len(sl) for sl in processed_streamlines], dtype=torch.int)
+
+    # Save padded_streamlines_tensor and actual_lengths
+    torch.save({'padded_streamlines_tensor': padded_streamlines_tensor, 'lengths': lengths}, save_path)
+    
+    return padded_streamlines_tensor, lengths
+
+
+def generate_labels_for_streamline(streamline, rel_positions, cube_size=9):
+    """
+    Calculate distances from voxels within a 9x9x9 cube centered around each voxel in a streamline
+    to the next voxel in the streamline, then apply softmax to generate probability distribution.
+    
+    Parameters:
+    - streamline: Tensor of shape [n, 3] containing voxel indices (x, y, z) for the streamline.
+    - cube_size: The edge length of the cube; default is 9, indicating a 9x9x9 cube.
+    
+    Returns:
+    -  probabilities: Tensor of shape [n, 730] containing probability distributions,
+                      including for the "end of fiber" class..
+    """
+    # Replicate the streamline positions to match the number of relative positions
+    expanded_streamline = streamline[:-1].unsqueeze(1).expand(-1, cube_size**3, -1)
+    
+    # Calculate the positions of all voxels within the cubes
+    voxel_positions = expanded_streamline + rel_positions
+    
+    # Calculate differences between voxel positions and the next point in the streamline
+    next_voxel_diffs = voxel_positions - streamline[1:].unsqueeze(1)
+    
+    # Compute Euclidean distances
+    distances = torch.norm(next_voxel_diffs.float(), dim=2)
+    probabilities = torch.softmax(-distances, dim=-1)
+
+    # Append column of zeros to indicate this is not the end of the fiber
+    end_of_fiber_column = torch.zeros(probabilities.shape[0], 1)
+    probabilities = torch.cat([probabilities, end_of_fiber_column], dim=-1)
+
+    # Append row of zeros and 1 in the last entry to indicate end of row with probability 1.
+    end_of_fiber_row = torch.zeros(1, cube_size**3+1)
+    end_of_fiber_row[-1] = 1
+
+    probabilities = torch.cat([probabilities, end_of_fiber_row], dim=0)
+    return probabilities
