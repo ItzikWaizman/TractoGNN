@@ -8,10 +8,13 @@ from utils.data_utils import *
 
 class SubjectDataHandler(object):
     def __init__(self, logger, params):
+        logger.info("Create SubjectDataHandler object")
+        self.logger = logger
         self.paths_dictionary = extract_subject_paths(params['subject_folder'])
         self.wm_mask = self.load_mask()
         self.index_to_voxel, self.voxel_to_index = self.get_voxel_index_maps()
         self.dwi, self.affine, self.inverse_affine = self.load_dwi()
+        self.logger.info("SubjectDataHandler: Prepare streamlines for training")
         self.tractogram, self.lengths = prepare_streamlines_for_training(self)   
         self.dwi_means = self.calc_means(self.dwi)
         self.train_loader, self.valid_loader = self.create_dataloaders(batch_size=params['batch_size'])
@@ -52,6 +55,7 @@ class SubjectDataHandler(object):
         return mask
 
     def create_connected_graph(self, subject_folder, radius=1, filter_connections=False):
+        self.logger.info("SubjectDataHandler: Create connected graph")
         graph_dir = os.path.join(subject_folder, "graph")
         graph_path = os.path.join(graph_dir, "connected_graph.pt")
         if os.path.exists(graph_path):

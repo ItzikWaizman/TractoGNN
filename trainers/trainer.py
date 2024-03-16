@@ -1,11 +1,14 @@
 import torch
 import torch.nn as nn
+from tqdm import tqdm
 from torch.optim import Adam
 from models.network import TractoGNN
 from data_handling import SubjectDataHandler
 
 class TractoGNNTrainer(object):
     def __init__(self, logger, params):
+        logger.info("Create TractoGNNTrainer object")
+        self.logger = logger
         self.device = params['device']
         self.network = TractoGNN(logger=logger, params=params).to(self.device)
         self.data_handler = SubjectDataHandler(logger=logger, params=params) 
@@ -13,8 +16,9 @@ class TractoGNNTrainer(object):
         self.num_epochs = params['epochs']
         self.criterion = nn.KLDivLoss(reduction='none')
         self.graph = self.data_handler.graph.to(self.device)
+        
 
-    def calculate_loss(self, outputs, labels, padding_mask):
+    def calc_loss(self, outputs, labels, padding_mask):
         """
         Calculate the masked loss using KLDivLoss for sequences with padding.
 
@@ -41,31 +45,35 @@ class TractoGNNTrainer(object):
         return loss
         
     def train_epoch(self, data_loader):
-        self.model.train()
+        self.network.train()
         total_loss, total_correct, total_samples = 0, 0, 0
-        for node_sequences_batch, labels, lengths, padding_mask in data_loader:
-            labels = labels.to(self.device)
-            node_sequences_batch = node_sequences_batch.to(self.device)
+        with tqdm(data_loader, desc='Training', unit='batch') as progress_bar:
+            for node_sequences_batch, labels, lengths, padding_mask in data_loader:
+                labels = labels.to(self.device)
+                node_sequences_batch = node_sequences_batch.to(self.device)
 
-            # Forward pass
-            outputs = self.model(self.graph, node_sequences_batch, lengths, padding_mask, self.data_handler.casuality_mask)
-            loss = self.calc_loss(outputs, labels, ~padding_mask)
+                # Forward pass
+                outputs = self.network(self.graph, node_sequences_batch, padding_mask, self.data_handler.casuality_mask)
+                loss = self.calc_loss(outputs, labels, ~padding_mask)
 
-            # Backward and optimize
-            self.optimizer.zero_grad()
-            loss.backward()
-            self.optimizer.step()
+                # Backward and optimize
+                self.optimizer.zero_grad()
+                loss.backward()
+                self.optimizer.step()
 
-            total_loss += loss.item() * node_sequences_batch.size(0)
-            total_correct += (outputs.argmax(dim=-1) == labels).sum().item()
-            total_samples += node_sequences_batch.size(0)
+                total_loss += loss.item() * node_sequences_batch.size(0)
+                total_correct += (outputs.argmax(dim=-1) == labels).sum().item()
+                total_samples += node_sequences_batch.size(0)
+
+                progress_bar.set_postfix({'loss': loss.item(), 'accuracy': total_correct / total_samples})
 
         avg_loss = total_loss / total_samples
         accuracy = total_correct / total_samples
         return avg_loss, accuracy
 
     def validate(self, data_loader):
-        self.model.eval()
+        self.logger.info("TractoGNNTrainer: Validation phase")
+        self.network.eval()
         total_loss, total_correct, total_samples = 0, 0, 0
         with torch.no_grad():
             for node_sequences_batch, labels, lengths, padding_mask in data_loader:
@@ -73,7 +81,7 @@ class TractoGNNTrainer(object):
                 node_sequences_batch = node_sequences_batch.to(self.device)
 
                 # Forward pass
-                outputs = self.model(self.graph, node_sequences_batch, lengths, padding_mask, self.data_handler.casuality_mask)
+                outputs = self.network(self.graph, node_sequences_batch, padding_mask, self.data_handler.casuality_mask)
                 loss = self.calc_loss(outputs, labels, ~padding_mask)
 
                 total_loss += loss.item() * node_sequences_batch.size(0)
@@ -87,8 +95,9 @@ class TractoGNNTrainer(object):
     def train(self):
         train_stats, val_stats = [], []
         for epoch in range(self.num_epochs):
+            self.logger.info("TractoGNNTrainer: Training Epoch")
             train_loss, train_accuracy = self.train_epoch(self.data_handler.train_loader)
-            val_loss, val_accuracy = self.validate(self.data_handler.val_loader)
+            val_loss, val_accuracy = self.validate(self.data_handler.valid_loader)
 
             train_stats.append((train_loss, train_accuracy))
             val_stats.append((val_loss, val_accuracy))

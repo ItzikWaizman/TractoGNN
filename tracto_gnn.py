@@ -26,10 +26,12 @@ if __name__ == '__main__':
     # Get parameters 
     params = Parameters().params
 
-    if args.train:
+    #if args.train:
+    if True:
+        logger.info("Staring training setups")
         trainer = TractoGNNTrainer(logger=logger, params=params)
         train_stats, val_stats = trainer.train()
 
-    if args.tarck:
-        logger.error("Tracking is not supported yet.")
-        pass
+    #if args.tarck:
+    #    logger.error("Tracking is not supported yet.")
+    #    pass

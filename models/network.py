@@ -10,8 +10,9 @@ from utils.model_utils import *
 class TractoGNN(nn.Module):
     def __init__(self, logger, params):
         super(TractoGNN, self).__init__()
-
+        logger.info("Create TractoGNN model obejct")
         # Fetch configurations
+        self.logger = logger
         self.graph_encoder_feature_dims = params['graph_encoder_feature_dims']
         self.latent_space_dim =  self.graph_encoder_feature_dims[-1]
         self.dropout_rate = params['dropout_rate']
