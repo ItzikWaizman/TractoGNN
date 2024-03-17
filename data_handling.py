@@ -1,24 +1,24 @@
-import torch
-import numpy as np
 import nibabel as nib
-import torch.nn.functional as F
 from torch_geometric.data import Data
-from torch.utils.data import Dataset, DataLoader, random_split
+from torch.utils.data import Dataset, DataLoader
 from utils.data_utils import *
 
+
 class SubjectDataHandler(object):
-    def __init__(self, logger, params):
+    def __init__(self, logger, params, train):
         logger.info("Create SubjectDataHandler object")
         self.logger = logger
-        self.paths_dictionary = extract_subject_paths(params['subject_folder'])
+        self.train = train
+        self.paths_dictionary = extract_subject_paths(params['train_subject_folder'] if self.train else
+                                                      params['val_subject_folder'])
         self.wm_mask = self.load_mask()
         self.index_to_voxel, self.voxel_to_index = self.get_voxel_index_maps()
         self.dwi, self.affine, self.inverse_affine = self.load_dwi()
         self.logger.info("SubjectDataHandler: Prepare streamlines for training")
-        self.tractogram, self.lengths = prepare_streamlines_for_training(self)   
-        self.dwi_means = self.calc_means(self.dwi)
-        self.train_loader, self.valid_loader = self.create_dataloaders(batch_size=params['batch_size'])
-        self.graph = self.create_connected_graph(params['subject_folder'])
+        self.tractogram, self.lengths = prepare_streamlines_for_training(self)
+        self.data_loader = self.create_dataloaders(batch_size=params['batch_size'])
+        self.graph = self.create_connected_graph(params['train_subject_folder'] if self.train else
+                                                 params['val_subject_folder'])
         self.casuality_mask = torch.nn.Transformer.generate_square_subsequent_mask(self.tractogram.size(1))
         
     def get_voxel_index_maps(self):
@@ -34,19 +34,25 @@ class SubjectDataHandler(object):
         sh_data = nib.load(self.paths_dictionary['sh'])
         affine = sh_data.affine
         sh_data = torch.tensor(sh_data.get_fdata(), dtype=torch.float32)
-        dwi_data = 255 * resample_dwi(sh_data)
+        dwi_data = resample_dwi(sh_data)
+        dwi_means, dwi_stds = self.calc_means(dwi_data)
+        dwi_data = (dwi_data - dwi_means) / dwi_stds
+        # original_dwi_data = nib.load(self.paths_dictionary["dwi_data"])
+        # original_dwi_data = torch.tensor(original_dwi_data.get_fdata(), dtype=torch.float32)
         return dwi_data, affine, np.linalg.inv(affine)
 
     def calc_means(self, dwi):
         DW_means = torch.zeros(dwi.shape[3])
+        DW_stds = torch.zeros(dwi.shape[3])
         mask = self.wm_mask
 
         for i in range(len(DW_means)):
             curr_volume = dwi[:, :, :, i]
             curr_volume = curr_volume[mask > 0]
             DW_means[i] = torch.mean(curr_volume)
+            DW_stds[i] = torch.std(curr_volume)
 
-        return DW_means
+        return DW_means, DW_stds
 
     def load_mask(self):
         mask_path = self.paths_dictionary['wm_mask']
@@ -98,26 +104,19 @@ class SubjectDataHandler(object):
 
         return graph
     
-    def create_dataloaders(self, batch_size, train_split=0.8):
-        dataset = StreamlineDataset(self.tractogram, self.lengths, self.index_to_voxel)
+    def create_dataloaders(self, batch_size):
+        dataset = StreamlineDataset(self.tractogram, self.lengths, self.index_to_voxel, train=self.train)
+        data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True if self.train else False)
+        
+        return data_loader
 
-        # Calculate split sizes
-        train_size = int(train_split * len(dataset))
-        val_size = len(dataset) - train_size
-        
-        # Split the dataset
-        train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
-        
-        # Create the DataLoaders
-        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-        val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
-        
-        return train_loader, val_loader
 
 class StreamlineDataset(Dataset):
-    def __init__(self, streamlines, lengths, index_to_voxel, cube_size=9):
-        self.streamlines = streamlines
-        self.lengths = lengths
+    def __init__(self, streamlines, lengths, index_to_voxel, cube_size=9, train=True):
+        perm = torch.arange(0, streamlines.size(0))
+        perm = perm[torch.randperm(perm.size(0))]
+        self.streamlines = streamlines[perm[0:100000]] if train else streamlines[perm[0:10000]]
+        self.lengths = lengths[perm[0:100000]] if train else lengths[perm[0:10000]]
         self.index_to_voxel = index_to_voxel
         self.cube_size = cube_size
         self.relative_positions = self.calculate_rel_positions()
@@ -144,11 +143,8 @@ class StreamlineDataset(Dataset):
             tuple: (streamline, label, seq_length) where label is generated for the streamline.
         """
         streamline = self.streamlines[idx]
-        streamline_voxels = self.index_to_voxel[streamline]
-        seq_length = self.lengths[idx]  
+        streamline_voxels = self.index_to_voxel[streamline.long()]
+        seq_length = self.lengths[idx]
         label = generate_labels_for_streamline(streamline_voxels, self.relative_positions)
         bool_mask = torch.arange(streamline.size(0)) >= seq_length
         return streamline, label, seq_length, bool_mask
-
-
-

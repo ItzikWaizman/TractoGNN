@@ -5,7 +5,7 @@ from config import Parameters
 from trainers.trainer import TractoGNNTrainer
 
 if __name__ == '__main__':
-     # Arguments parsing
+    # Arguments parsing
     parser = argparse.ArgumentParser()
     parser.add_argument('--train', action="store_true", required=False, help='Whether to start training phase')
     parser.add_argument('--track', action="store_true", required=False, help='Whether to start inference phase')
@@ -26,12 +26,12 @@ if __name__ == '__main__':
     # Get parameters 
     params = Parameters().params
 
-    #if args.train:
+    # if args.train:
     if True:
         logger.info("Staring training setups")
         trainer = TractoGNNTrainer(logger=logger, params=params)
         train_stats, val_stats = trainer.train()
 
-    #if args.tarck:
-    #    logger.error("Tracking is not supported yet.")
-    #    pass
+    # if args.track:
+    #     logger.error("Tracking is not supported yet.")
+    #     pass

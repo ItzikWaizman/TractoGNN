@@ -1,5 +1,6 @@
 import torch
 
+
 class Parameters(object):
 
     def __init__(self):
@@ -7,11 +8,12 @@ class Parameters(object):
 
         """ Model Parameters """
 
-        # encoder_feature_dims - GCN encoder feature dimensions in each layer. Number of layers determined by len(encoder_feature_dims)-1.
-        self.params['graph_encoder_feature_dims'] = [203, 164, 128, 64, 32]
+        # encoder_feature_dims - GCN encoder feature dimensions in each layer.
+        # Number of layers determined by len(encoder_feature_dims)-1.
+        self.params['graph_encoder_feature_dims'] = [103, 64, 32]
 
         # num_transformer_encoder_layers - Number of transformer encoder layers will be used for TractoGNN decoder.
-        self.params['num_transformer_encoder_layers'] = 3
+        self.params['num_transformer_encoder_layers'] = 8
 
         # nhead - Number of heads in the Multi Head Self Attention mechanism of the TransformerEncoderLayer.
         self.params['nhead'] = 8
@@ -34,13 +36,16 @@ class Parameters(object):
         """ Training Parameters """
 
         # learning_rate -(float) Initial learning rate in training phase.
-        self.params['learning_rate'] = 5e-4
+        self.params['learning_rate'] = 7e-4
 
         # batch_size - (int) Data batch size for training.
         self.params['batch_size'] = 500
 
         # epochs - (int) Number of training epochs.
-        self.params['epochs'] = 50
+        self.params['epochs'] = 10
+
+        # top k accuracy computation
+        self.params['k'] = 7
 
         # decay_LR - (bool) Whether to use learning rate decay.
         self.params['decay_LR'] = True
@@ -69,6 +74,7 @@ class Parameters(object):
 
         # subject_folder - (string) Path to subject folder containing diffusion weighted image, white matter mask, 
         # spherical harmonics coefficients and reference tractograms.
-        self.params['subject_folder'] = 'sub-1013'
+        self.params['train_subject_folder'] = 'sub-1013'
+        self.params['val_subject_folder'] = 'sub-1006'
        
     

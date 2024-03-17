@@ -6,6 +6,7 @@ from dipy.data import get_sphere
 from dipy.reconst.shm import sph_harm_lookup
 from nibabel import streamlines
 
+
 def extract_subject_paths(subject_folder):
     # Check if the subject folder exists
     if not os.path.exists(subject_folder):
@@ -13,8 +14,8 @@ def extract_subject_paths(subject_folder):
         return None
 
     # Extract bvals, bvecs, and dwi_data paths
-    # dwi_folder = os.path.join(subject_folder, "dwi")
-    # dwi_data_path = glob.glob(os.path.join(dwi_folder, "*dwi.nii*"))[0]
+    dwi_folder = os.path.join(subject_folder, "dwi")
+    dwi_data_path = glob.glob(os.path.join(dwi_folder, "*dwi.nii*"))[0]
 
     # Extract white matter mask path
     mask_folder = os.path.join(subject_folder, "mask")
@@ -29,7 +30,7 @@ def extract_subject_paths(subject_folder):
 
     # Return the extracted paths
     return {
-        # "dwi_data": dwi_data_path,
+        "dwi_data": dwi_data_path,
         "wm_mask": wm_mask_path,
         "tractography_folder": tractography_folder,
         "sh": sh_path
@@ -38,7 +39,7 @@ def extract_subject_paths(subject_folder):
 
 def resample_dwi(data_sh):
     # Resamples a diffusion signal according to a set of directions using spherical harmonics.
-    sphere = get_sphere('repulsion200')
+    sphere = get_sphere('repulsion100')
     sph_harm_basis = sph_harm_lookup.get("tournier07")
 
     # TractInferno dataset includes spherical harmonics coefficients up to order 6.
@@ -101,6 +102,7 @@ def load_tractogram(tractography_folder):
 
     return merged_streamlines
 
+
 def prepare_streamlines_for_training(subject, save_dir_name="torch_streamlines", save_filename="streamlines.pt"):
     """
     Prepares and saves streamlines for training, or loads them if already saved.
@@ -126,7 +128,7 @@ def prepare_streamlines_for_training(subject, save_dir_name="torch_streamlines",
     processed_streamlines = []
     for streamline in np_streamlines:
         streamline_voxels = ras_to_voxel(streamline, subject.inverse_affine)
-        streamline_indices = [subject.voxel_to_index_dic.get(tuple(pos.tolist()), -1) for pos in streamline_voxels]
+        streamline_indices = [subject.voxel_to_index.get(tuple(pos.tolist()), -1) for pos in streamline_voxels]
         streamline_indices = [index for index in streamline_indices if index != -1]
         processed_streamlines.append(streamline_indices)
 
@@ -165,7 +167,7 @@ def generate_labels_for_streamline(streamline, rel_positions, cube_size=9):
     
     # Compute Euclidean distances
     distances = torch.norm(next_voxel_diffs.float(), dim=2)
-    probabilities = torch.softmax(-distances, dim=-1)
+    probabilities = torch.softmax(-torch.pow(distances, 2), dim=-1)
 
     # Append column of zeros to indicate this is not the end of the fiber
     end_of_fiber_column = torch.zeros(probabilities.shape[0], 1)
