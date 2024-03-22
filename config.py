@@ -39,10 +39,10 @@ class Parameters(object):
         self.params['learning_rate'] = 7e-4
 
         # batch_size - (int) Data batch size for training.
-        self.params['batch_size'] = 500
+        self.params['batch_size'] = 1000
 
         # epochs - (int) Number of training epochs.
-        self.params['epochs'] = 10
+        self.params['epochs'] = 50
 
         # top k accuracy computation
         self.params['k'] = 7
@@ -56,6 +56,9 @@ class Parameters(object):
 
         # decay_factor - (float [0, 1]) In an LR decay step, the existing LR will be multiplied by this factor.
         self.params['decay_factor'] = 0.6
+
+        # threshold - the threshold for imporvement we require between epochs for our metric (accuracy). If the imporvement is less than the thresold, a decay lr will occur.
+        self.params['threshold'] = 0.05
 
         # early_stopping - (bool) Whether to use early stopping.
         self.params['early_stopping'] = True
@@ -74,7 +77,8 @@ class Parameters(object):
 
         # subject_folder - (string) Path to subject folder containing diffusion weighted image, white matter mask, 
         # spherical harmonics coefficients and reference tractograms.
-        self.params['train_subject_folder'] = 'sub-1013'
-        self.params['val_subject_folder'] = 'sub-1006'
+        self.params['train_subject_folder'] = '/home/itzikwei/dwi_dataset/sub-1013'
+        self.params['val_subject_folder'] = '/home/itzikwei/dwi_dataset/sub-1006'
+
        
     

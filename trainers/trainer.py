@@ -1,10 +1,10 @@
 import torch
 import torch.nn as nn
 from tqdm import tqdm
+import torch.optim as optim
 from torch.optim import Adam
 from models.network import TractoGNN
 from data_handling import SubjectDataHandler
-
 
 class TractoGNNTrainer(object):
     def __init__(self, logger, params):
@@ -15,6 +15,11 @@ class TractoGNNTrainer(object):
         self.train_data_handler = SubjectDataHandler(logger=logger, params=params, train=True)
         self.val_data_handler = SubjectDataHandler(logger=logger, params=params, train=False)
         self.optimizer = Adam(self.network.parameters(), lr=params['learning_rate'])
+        self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode='max',
+                                                              factor=params['decay_factor'],
+                                                              patience=params['decay_LR_patience'],
+                                                              threshold=params['threshold'],
+                                                              threshold_mode='abs')
         self.num_epochs = params['epochs']
         self.criterion = nn.KLDivLoss(reduction='none')
         self.train_graph = self.train_data_handler.graph.to(self.device)
@@ -51,7 +56,7 @@ class TractoGNNTrainer(object):
         
     def train_epoch(self, data_loader):
         self.network.train()
-        total_loss, total_correct, total_samples = 0, 0, 0
+        total_loss = 0
         with tqdm(data_loader, desc='Training', unit='batch') as progress_bar:
             for node_sequences_batch, labels, lengths, padding_mask in progress_bar:
                 labels = labels.to(self.device)
@@ -86,7 +91,7 @@ class TractoGNNTrainer(object):
     def validate(self, data_loader):
         self.logger.info("TractoGNNTrainer: Validation phase")
         self.network.eval()
-        total_loss, total_correct, total_samples = 0, 0, 0
+        total_loss = 0
         with torch.no_grad():
             for node_sequences_batch, labels, lengths, padding_mask in data_loader:
                 labels = labels.to(self.device)
@@ -106,6 +111,9 @@ class TractoGNNTrainer(object):
                 correct_top_k = torch.any(torch.eq(top1_pred_indices.unsqueeze(-1), top_k_label_indices), dim=-1)
                 acc_top_1 = torch.sum(correct_top_1 * (~padding_mask)) / lengths.sum()
                 acc_top_k = torch.sum(correct_top_k * (~padding_mask)) / lengths.sum()
+        
+        # Apply decay learning rate if needed.
+        self.scheduler.step(acc_top_k.item())
 
         return total_loss / len(data_loader), acc_top_1.item(), acc_top_k.item()
 
@@ -120,6 +128,6 @@ class TractoGNNTrainer(object):
             val_stats.append((val_loss, val_acc, val_acc_top_k))
 
             print(f'Epoch {epoch + 1}/{self.num_epochs}, Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}, '
-                  f'Val Acc: {val_acc:.4f}, Val Top {self.params["k"]} Acc: {val_acc_top_k:.4f}')
+                  f'Val Acc: {val_acc:.4f}, Val Top {self.params["k"]} Acc: {val_acc_top_k:.4f}, Learning rate: {self.optimizer.param_groups[0]["lr"]}')
             
         return train_stats, val_stats
