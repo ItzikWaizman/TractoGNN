@@ -2,10 +2,11 @@ import os
 import glob
 import torch
 import numpy as np
+import torch.nn.functional as F
+import matplotlib.pyplot as plt
 from dipy.data import get_sphere
 from dipy.reconst.shm import sph_harm_lookup
 from nibabel import streamlines
-
 
 def extract_subject_paths(subject_folder):
     # Check if the subject folder exists
@@ -39,7 +40,7 @@ def extract_subject_paths(subject_folder):
 
 def resample_dwi(data_sh):
     # Resamples a diffusion signal according to a set of directions using spherical harmonics.
-    sphere = get_sphere('repulsion100')
+    sphere = get_sphere('repulsion200')
     sph_harm_basis = sph_harm_lookup.get("tournier07")
 
     # TractInferno dataset includes spherical harmonics coefficients up to order 6.
@@ -143,7 +144,7 @@ def prepare_streamlines_for_training(subject, save_dir_name="torch_streamlines",
     return padded_streamlines_tensor, lengths
 
 
-def generate_labels_for_streamline(streamline, rel_positions, cube_size=9):
+def generate_labels_for_streamline(streamline, rel_positions, length, cube_size=5):
     """
     Calculate distances from voxels within a 9x9x9 cube centered around each voxel in a streamline
     to the next voxel in the streamline, then apply softmax to generate probability distribution.
@@ -175,7 +176,46 @@ def generate_labels_for_streamline(streamline, rel_positions, cube_size=9):
 
     # Append row of zeros and 1 in the last entry to indicate end of row with probability 1.
     end_of_fiber_row = torch.zeros(1, cube_size**3+1)
-    end_of_fiber_row[-1] = 1
+    end_of_fiber_row[0,-1] = 1
 
-    probabilities = torch.cat([probabilities, end_of_fiber_row], dim=0)
+    max_len = streamline.size(0)
+    num_rows_to_append = max_len - length +1
+    end_of_fiber_rows = end_of_fiber_row.repeat(num_rows_to_append, 1)
+
+    probabilities = torch.cat((probabilities[:length-1], end_of_fiber_rows), dim=0)
     return probabilities
+
+def generate_labels_for_streamline_v2(streamline, sphere_points, length, beta=0.1):
+
+    # Assuming streamline is in voxel space.
+    #TODO: Try convert it to RAS space. using VOXEL_TO_RAS
+
+    # Calculate unit vectors
+    directions = streamline[1:, :] - streamline[:-1, :]
+    directions_normalized = F.normalize(directions.float(), p=2, dim=1)
+
+    # Create labels
+    cosine_similarity = torch.matmul(directions_normalized, sphere_points.T)
+    angular_distance = torch.acos(torch.clamp(cosine_similarity, -1, 1))
+    labels_exp = torch.exp(-angular_distance / beta)
+    probabilities = labels_exp / torch.sum(labels_exp, dim=1, keepdim=True)
+
+    # Append column of zeros to indicate this is not the end of the fiber
+    end_of_fiber_column = torch.zeros(probabilities.shape[0], 1)
+    probabilities = torch.cat([probabilities, end_of_fiber_column], dim=-1)
+
+    # Append row of zeros and 1 in the last entry to indicate end of row with probability 1.
+    end_of_fiber_row = torch.zeros(1, sphere_points.size(0) + 1)
+    end_of_fiber_row[0,-1] = 1
+
+    max_len = streamline.size(0)
+    num_rows_to_append = max_len - length +1
+    end_of_fiber_rows = end_of_fiber_row.repeat(num_rows_to_append, 1)
+
+    probabilities = torch.cat((probabilities[:length-1], end_of_fiber_rows), dim=0)
+
+    return probabilities
+
+
+
+

@@ -5,6 +5,8 @@ import torch.optim as optim
 from torch.optim import Adam
 from models.network import TractoGNN
 from data_handling import SubjectDataHandler
+from torch.utils.tensorboard import SummaryWriter
+
 
 class TractoGNNTrainer(object):
     def __init__(self, logger, params):
@@ -33,8 +35,8 @@ class TractoGNNTrainer(object):
         Calculate the masked loss using KLDivLoss for sequences with padding.
 
         Parameters:
-        - outputs (Tensor): Log probabilities of shape [batch_size, seq_length, 730].
-        - labels (Tensor): True probabilities with shape [batch_size, seq_length, 730].
+        - outputs (Tensor): Log probabilities of shape [batch_size, seq_length, 725].
+        - labels (Tensor): True probabilities with shape [batch_size, seq_length, 725].
         - padding_mask (Tensor): A boolean tensor of shape [batch_size, seq_length] where True
         indicates valid points and False indicates padded points.
 
@@ -64,14 +66,13 @@ class TractoGNNTrainer(object):
                 padding_mask = padding_mask.to(self.device)
 
                 # Forward pass
-                outputs = self.network(self.train_graph, node_sequences_batch, padding_mask, self.train_casuality_mask)
+                outputs = self.network(self.train_graph, node_sequences_batch, padding_mask, self.train_casuality_mask, lengths)
                 loss = self.calc_loss(outputs, labels, ~padding_mask) / lengths.sum()
 
                 # Backward and optimize
                 self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
-
                 total_loss += loss.item()
 
                 top1_pred_indices = torch.argmax(outputs, dim=-1)
@@ -86,6 +87,11 @@ class TractoGNNTrainer(object):
                                           'acc': acc_top_1.item(),
                                           f'top{self.params["k"]}': acc_top_k.item()})
 
+                for name, param in self.network.named_parameters():
+                    if param.grad is not None:
+                        #print(f'{name}: {param.grad.abs().mean()}')  # Print average absolute gradient value
+                        pass
+
         return total_loss / len(data_loader), acc_top_1, acc_top_k
 
     def validate(self, data_loader):
@@ -99,7 +105,7 @@ class TractoGNNTrainer(object):
                 padding_mask = padding_mask.to(self.device)
 
                 # Forward pass
-                outputs = self.network(self.val_graph, node_sequences_batch, padding_mask, self.val_casuality_mask)
+                outputs = self.network(self.val_graph, node_sequences_batch, padding_mask, self.val_casuality_mask, lengths)
                 loss = self.calc_loss(outputs, labels, ~padding_mask) / lengths.sum()
 
                 total_loss += loss.item()
@@ -107,7 +113,7 @@ class TractoGNNTrainer(object):
                 top1_pred_indices = torch.argmax(outputs, dim=-1)
                 top1_label_indices = torch.argmax(labels, dim=-1)
                 top_k_label_indices = torch.topk(labels, k=self.params['k'], dim=-1)[1]
-                correct_top_1 = top1_pred_indices == top1_label_indices
+                correct_top_1 =  top1_pred_indices == top1_label_indices
                 correct_top_k = torch.any(torch.eq(top1_pred_indices.unsqueeze(-1), top_k_label_indices), dim=-1)
                 acc_top_1 = torch.sum(correct_top_1 * (~padding_mask)) / lengths.sum()
                 acc_top_k = torch.sum(correct_top_k * (~padding_mask)) / lengths.sum()
@@ -119,15 +125,25 @@ class TractoGNNTrainer(object):
 
     def train(self):
         train_stats, val_stats = [], []
+        writer = SummaryWriter('runs/Transformer5x5x5_4')
+        writer.add_text('Experiment Notes', 'Using GNN with 2 layers to increase to 150 features', 0)
         for epoch in range(self.num_epochs):
             self.logger.info("TractoGNNTrainer: Training Epoch")
             train_loss, train_acc, train_acc_top_k = self.train_epoch(self.train_data_handler.data_loader)
             val_loss, val_acc, val_acc_top_k = self.validate(self.val_data_handler.data_loader)
+            
+            writer.add_scalar('Accuracy1top/train', train_acc, epoch)
+            writer.add_scalar('Accuracyktop/train', train_acc_top_k, epoch)
+            writer.add_scalar('Loss/train', train_loss, epoch)
+            writer.add_scalar('Accuracy1top/val', val_acc, epoch)
+            writer.add_scalar('Accuracyktop/val', val_acc_top_k, epoch)
+            writer.add_scalar('Loss/val', val_loss, epoch)
+            writer.add_scalar('Learning rate', self.optimizer.param_groups[0]["lr"], epoch)
 
             train_stats.append((train_loss, train_acc, train_acc_top_k))
             val_stats.append((val_loss, val_acc, val_acc_top_k))
 
             print(f'Epoch {epoch + 1}/{self.num_epochs}, Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}, '
                   f'Val Acc: {val_acc:.4f}, Val Top {self.params["k"]} Acc: {val_acc_top_k:.4f}, Learning rate: {self.optimizer.param_groups[0]["lr"]}')
-            
+        writer.close()
         return train_stats, val_stats

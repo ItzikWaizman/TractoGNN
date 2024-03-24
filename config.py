@@ -10,13 +10,13 @@ class Parameters(object):
 
         # encoder_feature_dims - GCN encoder feature dimensions in each layer.
         # Number of layers determined by len(encoder_feature_dims)-1.
-        self.params['graph_encoder_feature_dims'] = [103, 64, 32]
+        self.params['graph_encoder_feature_dims'] = [200, 128]
 
         # num_transformer_encoder_layers - Number of transformer encoder layers will be used for TractoGNN decoder.
         self.params['num_transformer_encoder_layers'] = 8
 
         # nhead - Number of heads in the Multi Head Self Attention mechanism of the TransformerEncoderLayer.
-        self.params['nhead'] = 8
+        self.params['nhead'] = 4
 
         # transformer_feed_forward_dim - Dimension of the feedforward network in TransformerEncoder layer.
         self.params['transformer_feed_forward_dim'] = 256
@@ -25,10 +25,10 @@ class Parameters(object):
         self.params['dropout_rate'] = 0.3
 
         # max_streamline_len - Upper bound of an expected streamline length. Used for positional encoding.
-        self.params['max_streamline_len'] = 250
+        self.params['max_streamline_len'] = 100
 
         # output_size - Decoder output features size.
-        self.params['output_size'] = 730
+        self.params['output_size'] = 126
 
         # model_weights_save_dir - (string) Path for saving the model's files after training is done.
         self.params['model_weights_save_dir'] = ""
@@ -36,13 +36,12 @@ class Parameters(object):
         """ Training Parameters """
 
         # learning_rate -(float) Initial learning rate in training phase.
-        self.params['learning_rate'] = 7e-4
-
+        self.params['learning_rate'] = 0.0005
         # batch_size - (int) Data batch size for training.
-        self.params['batch_size'] = 1000
+        self.params['batch_size'] = 100
 
         # epochs - (int) Number of training epochs.
-        self.params['epochs'] = 50
+        self.params['epochs'] = 10
 
         # top k accuracy computation
         self.params['k'] = 7
@@ -52,10 +51,10 @@ class Parameters(object):
 
         # decay_LR_patience - (int) Number of training epochs to wait in case validation performance does not improve
         # before learning rate decay is applied.
-        self.params['decay_LR_patience'] = 2
+        self.params['decay_LR_patience'] = 1
 
         # decay_factor - (float [0, 1]) In an LR decay step, the existing LR will be multiplied by this factor.
-        self.params['decay_factor'] = 0.6
+        self.params['decay_factor'] = 0.5
 
         # threshold - the threshold for imporvement we require between epochs for our metric (accuracy). If the imporvement is less than the thresold, a decay lr will occur.
         self.params['threshold'] = 0.05

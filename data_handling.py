@@ -1,7 +1,9 @@
 import nibabel as nib
+from dipy.data import get_sphere
 from torch_geometric.data import Data
 from torch.utils.data import Dataset, DataLoader
 from utils.data_utils import *
+
 
 
 class SubjectDataHandler(object):
@@ -19,7 +21,11 @@ class SubjectDataHandler(object):
         self.data_loader = self.create_dataloaders(batch_size=params['batch_size'])
         self.graph = self.create_connected_graph(params['train_subject_folder'] if self.train else
                                                  params['val_subject_folder'])
+
         self.casuality_mask = torch.nn.Transformer.generate_square_subsequent_mask(self.tractogram.size(1))
+        del self.dwi
+        del self.wm_mask
+        del self.tractogram
         
     def get_voxel_index_maps(self):
         # Create a map between node index to white matter voxel.
@@ -34,11 +40,11 @@ class SubjectDataHandler(object):
         sh_data = nib.load(self.paths_dictionary['sh'])
         affine = sh_data.affine
         sh_data = torch.tensor(sh_data.get_fdata(), dtype=torch.float32)
-        dwi_data = resample_dwi(sh_data)
-        dwi_means, dwi_stds = self.calc_means(dwi_data)
-        dwi_data = (dwi_data - dwi_means) / dwi_stds
-        # original_dwi_data = nib.load(self.paths_dictionary["dwi_data"])
-        # original_dwi_data = torch.tensor(original_dwi_data.get_fdata(), dtype=torch.float32)
+        dwi_data = 1000*resample_dwi(sh_data)
+        #dwi_means, dwi_stds = self.calc_means(dwi_data)
+        #dwi_data = (dwi_data - dwi_means) / dwi_stds
+        #original_dwi_data = nib.load(self.paths_dictionary["dwi_data"])
+        #original_dwi_data = torch.tensor(original_dwi_data.get_fdata(), dtype=torch.float32)
         return dwi_data, affine, np.linalg.inv(affine)
 
     def calc_means(self, dwi):
@@ -74,7 +80,7 @@ class SubjectDataHandler(object):
 
         # Create node feature matrix
         node_ras_coordinates = voxel_to_ras(voxel_indices, torch.tensor(self.affine, dtype=torch.float32))
-        node_feature_matrix = torch.cat((self.dwi[wm_mask == 1], node_ras_coordinates), dim=1)
+        node_feature_matrix = self.dwi[wm_mask==1] #torch.cat((self.dwi[wm_mask == 1], node_ras_coordinates), dim=1)
 
         # Create Edge matrix
         edge_index_set = set()
@@ -105,21 +111,27 @@ class SubjectDataHandler(object):
         return graph
     
     def create_dataloaders(self, batch_size):
-        dataset = StreamlineDataset(self.tractogram, self.lengths, self.index_to_voxel, train=self.train)
+        dataset = StreamlineDataset(self.tractogram, self.lengths, self.index_to_voxel, self.affine, train=self.train)
         data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True if self.train else False)
         
         return data_loader
 
 
 class StreamlineDataset(Dataset):
-    def __init__(self, streamlines, lengths, index_to_voxel, cube_size=9, train=True):
+    def __init__(self, streamlines, lengths, index_to_voxel, affine, cube_size=5, train=True):
         perm = torch.arange(0, streamlines.size(0))
         perm = perm[torch.randperm(perm.size(0))]
-        self.streamlines = streamlines[perm[0:100000]] if train else streamlines[perm[0:10000]]
-        self.lengths = lengths[perm[0:100000]] if train else lengths[perm[0:10000]]
+        self.streamlines = streamlines[perm[0:500000]] if train else streamlines[perm[0:30000]]
+        self.lengths = lengths[perm[0:500000]] if train else lengths[perm[0:30000]]
         self.index_to_voxel = index_to_voxel
+        self.affine = torch.from_numpy(affine).float()
         self.cube_size = cube_size
         self.relative_positions = self.calculate_rel_positions()
+
+        sphere = get_sphere('repulsion724')
+        sphere_points = np.vstack([sphere.x, sphere.y, sphere.z]).T
+
+        self.sphere_points = torch.tensor(sphere_points, dtype=torch.float32)
 
     def calculate_rel_positions(self):
         offset = self.cube_size // 2
@@ -145,6 +157,8 @@ class StreamlineDataset(Dataset):
         streamline = self.streamlines[idx]
         streamline_voxels = self.index_to_voxel[streamline.long()]
         seq_length = self.lengths[idx]
-        label = generate_labels_for_streamline(streamline_voxels, self.relative_positions)
+        label = generate_labels_for_streamline(streamline_voxels, self.relative_positions, seq_length)
+        #label = generate_labels_for_streamline_v2(voxel_to_ras(streamline_voxels, self.affine), self.sphere_points, seq_length)
+        #label = generate_labels_for_streamline_v2(streamline_voxels, self.sphere_points, seq_length)
         bool_mask = torch.arange(streamline.size(0)) >= seq_length
         return streamline, label, seq_length, bool_mask
