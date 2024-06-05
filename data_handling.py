@@ -24,7 +24,6 @@ class SubjectDataHandler(object):
     def get_voxel_index_maps(self):
         # Create a map between node index to white matter voxel.
         index_to_voxel = torch.nonzero(self.wm_mask)
-        
         # Create the inverse map between white matter voxel to node index.
         voxel_to_index = {(row[0].item(), row[1].item(), row[2].item()): i for i, row in enumerate(index_to_voxel)}
 
