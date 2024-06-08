@@ -1,26 +1,34 @@
 import nibabel as nib
+from dipy.data import get_sphere
 from torch_geometric.data import Data
 from torch.utils.data import Dataset, DataLoader
 from utils.data_utils import *
 
+# Data Handler Modes
+TRAIN, VALIDATION, TRACK = 0, 1, 2
 
 class SubjectDataHandler(object):
-    def __init__(self, logger, params, train):
+    def __init__(self, logger, params, mode):
         logger.info("Create SubjectDataHandler object")
         self.logger = logger
-        self.train = train
-        self.paths_dictionary = extract_subject_paths(params['train_subject_folder'] if self.train else
-                                                      params['val_subject_folder'])
+        self.paths_dictionary = extract_subject_paths(self.get_subject_folder(mode, params))
         self.wm_mask = self.load_mask()
-        self.index_to_voxel, self.voxel_to_index = self.get_voxel_index_maps()
-        self.dwi, self.affine, self.inverse_affine = self.load_dwi()
-        self.logger.info("SubjectDataHandler: Prepare streamlines for training")
-        self.tractogram, self.lengths = prepare_streamlines_for_training(self)
-        self.data_loader = self.create_dataloaders(batch_size=params['batch_size'])
-        self.graph = self.create_connected_graph(params['train_subject_folder'] if self.train else
-                                                 params['val_subject_folder'])
-        self.casuality_mask = torch.nn.Transformer.generate_square_subsequent_mask(self.tractogram.size(1))
+        self.dwi, self.fodf, self.affine, self.inverse_affine, self.fa_map = self.load_subject_data()
         
+        if mode == TRAIN or mode == VALIDATION:
+            self.logger.info("SubjectDataHandler: Prepare streamlines for training")
+            self.tractogram, self.lengths = prepare_streamlines_for_training(self)
+            self.data_loader = self.create_dataloaders(batch_size=params['batch_size'])
+            self.casuality_mask = torch.nn.Transformer.generate_square_subsequent_mask(self.tractogram.size(1))
+        
+    def get_subject_folder(self, mode, params):
+        if mode == TRAIN:
+            return params['train_subject_folder']
+        elif mode == VALIDATION:
+            return params['val_subject_folder']
+        else:
+            return params['test_subject_folder']
+
     def get_voxel_index_maps(self):
         # Create a map between node index to white matter voxel.
         index_to_voxel = torch.nonzero(self.wm_mask)
@@ -29,16 +37,20 @@ class SubjectDataHandler(object):
 
         return index_to_voxel, voxel_to_index
 
-    def load_dwi(self):
-        sh_data = nib.load(self.paths_dictionary['sh'])
-        affine = sh_data.affine
-        sh_data = torch.tensor(sh_data.get_fdata(), dtype=torch.float32)
-        dwi_data = resample_dwi(sh_data)
-        dwi_means, dwi_stds = self.calc_means(dwi_data)
-        dwi_data = (dwi_data - dwi_means) / dwi_stds
-        # original_dwi_data = nib.load(self.paths_dictionary["dwi_data"])
-        # original_dwi_data = torch.tensor(original_dwi_data.get_fdata(), dtype=torch.float32)
-        return dwi_data, affine, np.linalg.inv(affine)
+    def load_subject_data(self):
+        dwi_sh = nib.load(self.paths_dictionary['sh'])
+        fodf_sh = nib.load(self.paths_dictionary['fodf'])
+
+        fa_map = nib.load(self.paths_dictionary['fa'])
+        fa_map = torch.tensor(fa_map.get_fdata(), dtype=torch.float32)
+
+        affine = torch.tensor(dwi_sh.affine, dtype=torch.float32)
+        dwi_sh_data = torch.tensor(dwi_sh.get_fdata(), dtype=torch.float32)
+        fodf_sh_data = torch.tensor(fodf_sh.get_fdata(), dtype=torch.float32)
+
+        dwi_data = sample_signal_from_sh(dwi_sh_data, sh_order=6, sphere=get_sphere('repulsion100'))
+        fodf_data = sample_signal_from_sh(fodf_sh_data, sh_order=8, sphere=get_sphere('repulsion724'))
+        return dwi_data, fodf_data, affine, torch.inverse(affine), fa_map
 
     def calc_means(self, dwi):
         DW_means = torch.zeros(dwi.shape[3])
@@ -58,57 +70,12 @@ class SubjectDataHandler(object):
         mask = nib.load(mask_path)
         mask = torch.tensor(mask.get_fdata(), dtype=torch.float32)
         return mask
-
-    def create_connected_graph(self, subject_folder, radius=1, filter_connections=False):
-        self.logger.info("SubjectDataHandler: Create connected graph")
-        graph_dir = os.path.join(subject_folder, "graph")
-        graph_path = os.path.join(graph_dir, "connected_graph.pt")
-        if os.path.exists(graph_path):
-            # Load and return the graph
-            return torch.load(graph_path)
-
-        wm_mask = self.wm_mask
-        voxel_indices = self.index_to_voxel
-        position_to_index = self.voxel_to_index
-
-        # Create node feature matrix
-        node_ras_coordinates = voxel_to_ras(voxel_indices, torch.tensor(self.affine, dtype=torch.float32))
-        node_feature_matrix = torch.cat((self.dwi[wm_mask == 1], node_ras_coordinates), dim=1)
-
-        # Create Edge matrix
-        edge_index_set = set()
-        for row, i in position_to_index.items():
-
-            dims = [np.linspace(row[j] - radius, row[j] + radius, 2 * radius + 1) for j in range(3)]
-            mesh = np.meshgrid(*dims)
-            neighbors = np.concatenate((mesh[0].reshape(-1, 1), mesh[1].reshape(-1, 1),
-                                        mesh[2].reshape(-1, 1)), axis=1).astype(int)
-            target_nodes = [position_to_index.get(tuple(neighbor), -1) for neighbor in neighbors]
-            target_nodes = [index for index in target_nodes if index != -1]
-
-            if target_nodes:
-                src_nodes = [i for _ in target_nodes]
-                edge_index_set.update(zip(src_nodes, target_nodes))
-
-        if filter_connections:
-            edge_index_set = filter_tuples(edge_index_set)
-
-        edge_index = torch.tensor(list(edge_index_set)).T
-        graph = Data(x=node_feature_matrix, edge_index=edge_index)
-
-        # Ensure the directory exists
-        os.makedirs(graph_dir, exist_ok=True)
-        # Save the graph
-        torch.save(graph, graph_path)
-
-        return graph
     
     def create_dataloaders(self, batch_size):
         dataset = StreamlineDataset(self.tractogram, self.lengths, self.index_to_voxel, train=self.train)
         data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True if self.train else False)
         
         return data_loader
-
 
 class StreamlineDataset(Dataset):
     def __init__(self, streamlines, lengths, index_to_voxel, cube_size=9, train=True):
@@ -135,11 +102,11 @@ class StreamlineDataset(Dataset):
 
     def __getitem__(self, idx):
         """
-        Args:
-            idx (int): Index of the streamline to fetch.
+        Parameters:
+        - idx (int): Index of the streamline to fetch.
             
         Returns:
-            tuple: (streamline, label, seq_length) where label is generated for the streamline.
+        - tuple: (streamline, label, seq_length) where label is generated for the streamline.
         """
         streamline = self.streamlines[idx]
         streamline_voxels = self.index_to_voxel[streamline.long()]

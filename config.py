@@ -31,7 +31,7 @@ class Parameters(object):
         self.params['output_size'] = 730
 
         # model_weights_save_dir - (string) Path for saving the model's files after training is done.
-        self.params['model_weights_save_dir'] = ""
+        self.params['trained_model_path'] = "trained_model/model.pt"
 
         """ Training Parameters """
 
@@ -72,9 +72,38 @@ class Parameters(object):
 
         """ Data Parameters """
 
-        # subject_folder - (string) Path to subject folder containing diffusion weighted image, white matter mask, 
-        # spherical harmonics coefficients and reference tractograms.
+        # subject_folder - (string) Path to subject folder containing related data
         self.params['train_subject_folder'] = 'sub-1013'
+
         self.params['val_subject_folder'] = 'sub-1006'
-       
+        
+        self.params['test_subject_folder'] = 'sub-1013'
+        
+        """ Tracking parameters """
+        # num_seeds - (int) number of initial points to start stracking from.
+        self.params['num_seeds'] = 100000
+
+        # track_batch_size - (int)  batch size to perform tracking.
+        self.params['track_batch_size'] = 500
+
+        # angular_threshold - (float) if the angle between 2 consecutive steps in tracking is greater than angular threshold (in degrees), tracking is treminated.
+        self.params['angular_threshold'] = 45.0
+        
+        # fa_threshold - (float) fractional anisotropy threshold to terminate the tracking.
+        self.params['fa_threshold'] = 0.2
+
+        # max_sequence_length - (int) max allowed length of streamline.
+        self.params['max_sequence_length'] = 150
+
+        # min_streamline_length - (int) min allowed length of streamline.
+        self.params['min_streamline_length'] = 3
+
+        # tracking_step_size - (float) step size in which we will make a step in the corresponding direction during tracking.
+        self.params['tracking_step_size'] = 0.5
+
+        # save_tracking - (bool) a boolean to determine whether to save the tracking or not.
+        self.params['save_tracking'] = True
+
+        # trk_file_saving_path - (string) path to save the tractography
+        self.params['trk_file_saving_path'] = 'output_tractography.trk'
     

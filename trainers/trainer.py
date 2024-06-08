@@ -21,7 +21,9 @@ class TractoGNNTrainer(object):
         self.val_graph = self.val_data_handler.graph.to(self.device)
         self.train_casuality_mask = self.train_data_handler.casuality_mask.to(self.device)
         self.val_casuality_mask = self.val_data_handler.casuality_mask.to(self.device)
+        self.trained_model_path = params['trained_model_path']
         self.params = params
+        
 
     def calc_loss(self, outputs, labels, padding_mask):
         """
@@ -121,5 +123,5 @@ class TractoGNNTrainer(object):
 
             print(f'Epoch {epoch + 1}/{self.num_epochs}, Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}, '
                   f'Val Acc: {val_acc:.4f}, Val Top {self.params["k"]} Acc: {val_acc_top_k:.4f}')
-            
+        torch.save(self.network.state_dict, self.trained_model_path)
         return train_stats, val_stats
