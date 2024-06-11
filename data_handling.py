@@ -3,20 +3,22 @@ from dipy.data import get_sphere
 from torch_geometric.data import Data
 from torch.utils.data import Dataset, DataLoader
 from utils.data_utils import *
+from utils.common_utils import *
 
 # Data Handler Modes
 TRAIN, VALIDATION, TRACK = 0, 1, 2
 
 class SubjectDataHandler(object):
     def __init__(self, logger, params, mode):
-        logger.info("Create SubjectDataHandler object")
+        logger.info(f"Create SubjectDataHandler object with mode {mode}")
+        self.mode = mode
         self.logger = logger
         self.paths_dictionary = extract_subject_paths(self.get_subject_folder(mode, params))
         self.wm_mask = self.load_mask()
-        self.dwi, self.fodf, self.affine, self.inverse_affine, self.fa_map = self.load_subject_data()
+        self.dwi, self.fodf, self.affine, self.inverse_affine, self.fa_map = self.load_subject_data(mode)
         
-        if mode == TRAIN or mode == VALIDATION:
-            self.logger.info("SubjectDataHandler: Prepare streamlines for training")
+        if mode is TRAIN or mode is VALIDATION:
+            self.logger.info("SubjectDataHandler: Preparing streamlines")
             self.tractogram, self.lengths = prepare_streamlines_for_training(self)
             self.data_loader = self.create_dataloaders(batch_size=params['batch_size'])
             self.casuality_mask = torch.nn.Transformer.generate_square_subsequent_mask(self.tractogram.size(1))
@@ -37,7 +39,7 @@ class SubjectDataHandler(object):
 
         return index_to_voxel, voxel_to_index
 
-    def load_subject_data(self):
+    def load_subject_data(self, mode):
         dwi_sh = nib.load(self.paths_dictionary['sh'])
         fodf_sh = nib.load(self.paths_dictionary['fodf'])
 
@@ -49,7 +51,7 @@ class SubjectDataHandler(object):
         fodf_sh_data = torch.tensor(fodf_sh.get_fdata(), dtype=torch.float32)
 
         dwi_data = sample_signal_from_sh(dwi_sh_data, sh_order=6, sphere=get_sphere('repulsion100'))
-        fodf_data = sample_signal_from_sh(fodf_sh_data, sh_order=8, sphere=get_sphere('repulsion724'))
+        fodf_data = sample_signal_from_sh(fodf_sh_data, sh_order=8, sphere=get_sphere('repulsion724')) if mode is TRACK else None
         return dwi_data, fodf_data, affine, torch.inverse(affine), fa_map
 
     def calc_means(self, dwi):
@@ -72,30 +74,26 @@ class SubjectDataHandler(object):
         return mask
     
     def create_dataloaders(self, batch_size):
-        dataset = StreamlineDataset(self.tractogram, self.lengths, self.index_to_voxel, train=self.train)
+        dataset = StreamlineDataset(self.tractogram, self.lengths, self.mode)
         data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True if self.train else False)
         
         return data_loader
 
 class StreamlineDataset(Dataset):
-    def __init__(self, streamlines, lengths, index_to_voxel, cube_size=9, train=True):
-        perm = torch.arange(0, streamlines.size(0))
-        perm = perm[torch.randperm(perm.size(0))]
-        self.streamlines = streamlines[perm[0:100000]] if train else streamlines[perm[0:10000]]
-        self.lengths = lengths[perm[0:100000]] if train else lengths[perm[0:10000]]
-        self.index_to_voxel = index_to_voxel
-        self.cube_size = cube_size
-        self.relative_positions = self.calculate_rel_positions()
+    def __init__(self, streamlines, lengths, mode):
+        permutation = torch.arange(0, streamlines.size(0))
+        permutation = permutation[torch.randperm(permutation.size(0))]
 
-    def calculate_rel_positions(self):
-        offset = self.cube_size // 2
-        relative_positions = torch.stack(torch.meshgrid(
-            torch.arange(-offset, offset + 1),
-            torch.arange(-offset, offset + 1),
-            torch.arange(-offset, offset + 1),
-            indexing='ij'), dim=-1).reshape(-1, 3).int()
-        
-        return relative_positions
+        self.streamlines = streamlines[permutation[0:100000]] if mode is TRAIN else streamlines[permutation[0:10000]]
+        self.lengths = lengths[permutation[0:100000]] if mode is TRAIN else lengths[permutation[0:10000]]
+
+        sphere = get_sphere('repulsion724')
+        self.sphere_points = torch.zeros((725, 3), dtype=torch.float32)
+        self.sphere_points[:724, :] = sphere
+
+        EoF = torch.zeros(725, dtype=torch.float32)
+        EoF[724] = 1
+        self.EoF = EoF
 
     def __len__(self):
         return len(self.streamlines)
@@ -106,11 +104,11 @@ class StreamlineDataset(Dataset):
         - idx (int): Index of the streamline to fetch.
             
         Returns:
-        - tuple: (streamline, label, seq_length) where label is generated for the streamline.
+        - tuple: (streamline, label, seq_length, padding_mask)
         """
         streamline = self.streamlines[idx]
-        streamline_voxels = self.index_to_voxel[streamline.long()]
+        streamline_voxels = ras_to_voxel(streamline)
         seq_length = self.lengths[idx]
-        label = generate_labels_for_streamline(streamline_voxels, self.relative_positions)
-        bool_mask = torch.arange(streamline.size(0)) >= seq_length
-        return streamline, label, seq_length, bool_mask
+        label = generate_labels(streamline, seq_length, self.sphere_points, self.EoF)
+        padding_mask = torch.arange(streamline.size(0)) >= seq_length
+        return streamline_voxels, label, seq_length, padding_mask

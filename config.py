@@ -8,10 +8,6 @@ class Parameters(object):
 
         """ Model Parameters """
 
-        # encoder_feature_dims - GCN encoder feature dimensions in each layer.
-        # Number of layers determined by len(encoder_feature_dims)-1.
-        self.params['graph_encoder_feature_dims'] = [103, 64, 32]
-
         # num_transformer_encoder_layers - Number of transformer encoder layers will be used for TractoGNN decoder.
         self.params['num_transformer_encoder_layers'] = 8
 
@@ -19,16 +15,16 @@ class Parameters(object):
         self.params['nhead'] = 8
 
         # transformer_feed_forward_dim - Dimension of the feedforward network in TransformerEncoder layer.
-        self.params['transformer_feed_forward_dim'] = 256
+        self.params['transformer_feed_forward_dim'] = 512
 
         # dropout_rate - Probability to execute a dropout
         self.params['dropout_rate'] = 0.3
 
         # max_streamline_len - Upper bound of an expected streamline length. Used for positional encoding.
-        self.params['max_streamline_len'] = 250
+        self.params['max_streamline_len'] = 150
 
         # output_size - Decoder output features size.
-        self.params['output_size'] = 730
+        self.params['output_size'] = 725
 
         # model_weights_save_dir - (string) Path for saving the model's files after training is done.
         self.params['trained_model_path'] = "trained_model/model.pt"
@@ -78,6 +74,8 @@ class Parameters(object):
         self.params['val_subject_folder'] = 'sub-1006'
         
         self.params['test_subject_folder'] = 'sub-1013'
+
+        self.params['num_of_gradients'] = 100
         
         """ Tracking parameters """
         # num_seeds - (int) number of initial points to start stracking from.

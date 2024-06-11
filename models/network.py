@@ -11,17 +11,13 @@ class TractoGNN(nn.Module):
         logger.info("Create TractoGNN model object")
         # Fetch configurations
         self.logger = logger
-        self.graph_encoder_feature_dims = params['graph_encoder_feature_dims']
-        self.latent_space_dim = self.graph_encoder_feature_dims[-1]
+        self.latent_space_dim = params['num_of_gradients']
         self.dropout_rate = params['dropout_rate']
         self.max_seq_len = params['max_streamline_len']
         self.nhead = params['nhead']
         self.transformer_forward_dim = params['transformer_feed_forward_dim']
         self.num_transformer_encoder_layers = params['num_transformer_encoder_layers']
         self.output_size = params['output_size']
-
-        # Set graph autoencoder layer
-        self.graph_encoder = GCNAutoEncoder(self.graph_encoder_feature_dims, self.dropout_rate)
 
         # Set positional encoding layer
         self.positional_encoding = PositionalEncoding(self.latent_space_dim, self.dropout_rate, self.max_seq_len)
@@ -39,23 +35,26 @@ class TractoGNN(nn.Module):
         # Use Linear network as a decoder.
         self.decoder = nn.Sequential(nn.Linear(self.latent_space_dim, self.output_size))
         
-    def forward(self, input_graph, node_sequence_batch, padding_mask, casuality_mask):
+    def forward(self, dwi_data, node_sequence_batch, padding_mask, casuality_mask):
         """
-        node_sequence_batch - Tensor of shape [sequence_len, batch_size].
-        sequence_lengths - the actual lengths of any sequence in the batch.
+        Parameters:
+        - dwi_data - 4d image holding the diffusion mri data.
+        - node_sequence_batch - Tensor of shape [batch_size, max_sequence_length, 3], holds the streamlines coordinates in voxel space.
+        - sequence_lengths - the actual lengths of strimlines in the batch.
+        - padding_mask - boolean mask of shape [batch_size, max_sequence_length, 1] with 'True' where the values are zero padded.
+        - casuality_mask - Triangular matrix so the attention will not take into account future steps.
 
-        """        
-        # Encode the entire graph
-        graph_node_features = self.graph_encoder.encode(input_graph)  # Shape: [num_nodes, feature_dim]
-        
-        # Extract features for the current sequence of nodes. node_sequence_batch assumed to be padded with 0s, meaning 
-        # values that exceeds the corresponding sequence length are not valid.
-        node_features_batch = graph_node_features[node_sequence_batch.long()]
+        Returns:
+        - probabilities: Tensor of shape [batch_size, max_sequence_length, 725] modeling the estimated fodfs.
+        """       
+        # Fetch the features of each point in the streamlines:
+        x = dwi_data[node_sequence_batch[:, :, 0], node_sequence_batch[:, :, 1], node_sequence_batch[:, :, 2]]
+
         # Apply positional encoding
-        node_features_batch = self.positional_encoding(node_features_batch)
+        x = self.positional_encoding(x)
         
         # Process sequence with TransformerEncoder
-        encoded_sequence = self.transformer_encoder(node_features_batch,
+        encoded_sequence = self.transformer_encoder(x,
                                                     mask=casuality_mask,
                                                     src_key_padding_mask=padding_mask)
 
@@ -64,44 +63,19 @@ class TractoGNN(nn.Module):
 
         return probabilities
 
-
-class GCNAutoEncoder(nn.Module): 
-    def __init__(self, encoder_feature_dims, dropout_rate):
-        super(GCNAutoEncoder, self).__init__()
-
-        # Number of GCN layers
-        self.num_layers = len(encoder_feature_dims) - 1
-        self.conv_layers = nn.ModuleList([GCNConv(encoder_feature_dims[i],  encoder_feature_dims[i+1])
-                                          for i in range(self.num_layers)])
-        self.activation = nn.ReLU()
-        self.dropout = nn.Dropout(p=dropout_rate)
-
-    def encode(self, input_graph):
-        # x - graph node features. Tensor of shape #num_of_nodex X
-        # (#mri_gradient_directions + concatenation of 3 RAS coordinates specifying geometric location).
-        x, edge_index = input_graph.x, input_graph.edge_index
-
-        for layer_idx in range(self.num_layers):
-            x = self.conv_layers[layer_idx](x, edge_index)
-            if layer_idx < self.num_layers - 1:  # Apply dropouts before last layer
-                x = self.activation(x)
-                x = self.dropout(x)
-        return x
-    
-
 class PositionalEncoding(nn.Module):
-    def __init__(self, d_model, dropout=0.1, max_len=500):
+    def __init__(self, d_model, max_len=150):
         super(PositionalEncoding, self).__init__()
-        self.dropout = nn.Dropout(p=dropout)
+        encoding = torch.zeros(max_len, d_model)
 
         position = torch.arange(max_len).unsqueeze(1)
-        div_term = torch.exp(torch.arange(0, d_model, 2) * -(torch.log(torch.tensor(10000.0)) / d_model))
+        _2i = torch.arange(0, d_model, 2).float
+        div_term = (10000 ** (_2i / d_model))
+
+        encoding[:, 0::2] = torch.sin(position * div_term)
+        encoding[:, 1::2] = torch.cos(position * div_term)
         
-        pe = torch.zeros(1, max_len, d_model)
-        pe[0, :, 0::2] = torch.sin(position * div_term)
-        pe[0, :, 1::2] = torch.cos(position * div_term)
-        
-        self.register_buffer('pe', pe)
+        self.register_buffer('encoding', encoding)
 
     def forward(self, x):
         """
@@ -113,5 +87,4 @@ class PositionalEncoding(nn.Module):
         Returns:
             Tensor: The input tensor augmented with positional encodings.
         """
-        x = x + self.pe[0, :x.size(1), :]
-        return self.dropout(x)
+        return x + self.encoding[:, :].to(x.device).unsqueeze(0)

@@ -4,6 +4,7 @@ import torch
 import numpy as np
 from dipy.reconst.shm import sph_harm_lookup
 from nibabel import streamlines
+import torch.nn.functional as F
 
 
 def extract_subject_paths(subject_folder):
@@ -110,6 +111,9 @@ def prepare_streamlines_for_training(subject, save_dir_name="torch_streamlines",
     - subject - SubjectDataHandler object.
     - save_dir: Directory where the tensor and lengths will be saved.
     - save_filename: Filename for saving the tensor and lengths.
+
+    Returns:
+    - padded_streamlines: torch tensor of padded streamlines
     """
 
     save_dir = os.path.join(subject.paths_dictionary['tractography_folder'], save_dir_name)
@@ -124,55 +128,53 @@ def prepare_streamlines_for_training(subject, save_dir_name="torch_streamlines",
     
     # Prepare streamlines and lengths
     np_streamlines = load_tractogram(subject.paths_dictionary['tractography_folder'])
-    processed_streamlines = []
+    torch_streamlines = []
     for streamline in np_streamlines:
-        streamline_voxels = ras_to_voxel(streamline, subject.inverse_affine)
-        processed_streamlines.append(streamline_voxels)
+        torch_streamline = torch.tensor(streamline, dtype=torch.float32)
+        torch_streamlines.append(torch_streamline)
 
-    max_seq_len = max(len(sl) for sl in processed_streamlines)
-    padded_streamlines = [sl + [0]*(max_seq_len - len(sl)) for sl in processed_streamlines]
-    padded_streamlines_tensor = torch.tensor(padded_streamlines, dtype=torch.int)
-    lengths = torch.tensor([len(sl) for sl in processed_streamlines], dtype=torch.int)
+    max_seq_len = max(len(sl) for sl in torch_streamlines)
+    padded_streamlines = torch.zeros(len(torch_streamlines) + 1,max_seq_len, 3)
 
-    # Save padded_streamlines_tensor and actual_lengths
-    torch.save({'padded_streamlines_tensor': padded_streamlines_tensor, 'lengths': lengths}, save_path)
+    for i, streamline in enumerate(torch_streamlines):
+        length = len(streamline)
+        padded_streamlines[i, :length, :] = streamline
+
+    lengths = torch.tensor([len(sl) for sl in torch_streamlines], dtype=torch.int)
+
+    # Save padded_streamlines and lengths
+    torch.save({'padded_streamlines_tensor': padded_streamlines, 'lengths': lengths}, save_path)
     
-    return padded_streamlines_tensor, lengths
+    return padded_streamlines, lengths
 
 
-def generate_labels_for_streamline(streamline, rel_positions, cube_size=9):
-    """
-    Calculate distances from voxels within a 9x9x9 cube centered around each voxel in a streamline
-    to the next voxel in the streamline, then apply softmax to generate probability distribution.
+def generate_labels(streamline, actual_length, sphere_points, EoF, sigma=0.1):
+    # Truncate the streamline to the actual length + 1 (The streamlines are padded enough to ensure it is safe)
+    padded_length = streamline.size(0)
+    streamline = streamline[:actual_length+1]
     
-    Parameters:
-    - streamline: Tensor of shape [n, 3] containing voxel indices (x, y, z) for the streamline.
-    - cube_size: The edge length of the cube; default is 9, indicating a 9x9x9 cube.
+    # Calculate direction unit vectors between consecutive points
+    directions = streamline[1:] - streamline[:-1]
+    directions = directions / directions.norm(dim=1, keepdim=True)
     
-    Returns:
-    -  probabilities: Tensor of shape [n, 730] containing probability distributions,
-                      including for the "end of fiber" class..
-    """
-    # Replicate the streamline positions to match the number of relative positions
-    expanded_streamline = streamline[:-1].unsqueeze(1).expand(-1, cube_size**3, -1)
+    # Calculate cosine similarity for all direction vectors with all sphere points
+    # directions: (actual_length, 3), sphere_points: (725, 3)
+    # cosine_similarity: (actual_length, 725)
+    cosine_similarity = torch.matmul(directions, sphere_points.t())
     
-    # Calculate the positions of all voxels within the cubes
-    voxel_positions = expanded_streamline + rel_positions
-    
-    # Calculate differences between voxel positions and the next point in the streamline
-    next_voxel_diffs = voxel_positions - streamline[1:].unsqueeze(1)
-    
-    # Compute Euclidean distances
-    distances = torch.norm(next_voxel_diffs.float(), dim=2)
-    probabilities = torch.softmax(-torch.pow(distances, 2), dim=-1)
+    # Convert cosine similarity to distance on the unit sphere
+    cosine_similarity = torch.clamp(cosine_similarity, -1.0, 1.0)
+    distances = torch.acos(cosine_similarity)
 
-    # Append column of zeros to indicate this is not the end of the fiber
-    end_of_fiber_column = torch.zeros(probabilities.shape[0], 1)
-    probabilities = torch.cat([probabilities, end_of_fiber_column], dim=-1)
+    # Apply gaussian kernel
+    gaussian_weights = torch.exp(-distances**2 / (2 * sigma**2))
+    gaussian_weights[:actual_length-1, 724] = 0 # Set the probability of EoF to zero for any point on the streamline except the last one.
 
-    # Append row of zeros and 1 in the last entry to indicate end of row with probability 1.
-    end_of_fiber_row = torch.zeros(1, cube_size**3+1)
-    end_of_fiber_row[-1] = 1
+    # Generate FODFs
+    fodfs = gaussian_weights / gaussian_weights.sum(dim=1, keepdim=True)
+    fodfs[actual_length-1, :] = EoF # Set the fodf of the last point to be the fodf of EoF
 
-    probabilities = torch.cat([probabilities, end_of_fiber_row], dim=0)
-    return probabilities
+    fodfs_padded = torch.zeros((padded_length, 725, 3))
+    fodfs_padded[:actual_length, :, :] = fodfs
+
+    return fodfs_padded

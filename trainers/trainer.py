@@ -3,7 +3,7 @@ import torch.nn as nn
 from tqdm import tqdm
 from torch.optim import Adam
 from models.network import TractoGNN
-from data_handling import SubjectDataHandler
+from data_handling import *
 
 
 class TractoGNNTrainer(object):
@@ -11,19 +11,17 @@ class TractoGNNTrainer(object):
         logger.info("Create TractoGNNTrainer object")
         self.logger = logger
         self.device = params['device']
-        self.network = TractoGNN(logger=logger, params=params).to(self.device)
-        self.train_data_handler = SubjectDataHandler(logger=logger, params=params, train=True)
-        self.val_data_handler = SubjectDataHandler(logger=logger, params=params, train=False)
+        #self.network = TractoGNN(logger=logger, params=params).to(self.device)
+        self.train_data_handler = SubjectDataHandler(logger=logger, params=params, mode=TRAIN)
+        self.val_data_handler = SubjectDataHandler(logger=logger, params=params, mode=VALIDATION)
         self.optimizer = Adam(self.network.parameters(), lr=params['learning_rate'])
         self.num_epochs = params['epochs']
         self.criterion = nn.KLDivLoss(reduction='none')
-        self.train_graph = self.train_data_handler.graph.to(self.device)
-        self.val_graph = self.val_data_handler.graph.to(self.device)
         self.train_casuality_mask = self.train_data_handler.casuality_mask.to(self.device)
         self.val_casuality_mask = self.val_data_handler.casuality_mask.to(self.device)
         self.trained_model_path = params['trained_model_path']
         self.params = params
-        
+    
 
     def calc_loss(self, outputs, labels, padding_mask):
         """
