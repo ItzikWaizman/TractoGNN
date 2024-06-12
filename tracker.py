@@ -15,6 +15,7 @@ class Tracker(nn.Module):
         #if not debug:
         #    self.load_model(params['trained_model_path'])
         self.data_handler = SubjectDataHandler(logger=logger, params=params, mode=TRACK)
+        self.tractogram = self.data_handler.tractogram # FOR DEBUG
         self.affine, self.inverse_affine = self.data_handler.affine, self.data_handler.inverse_affine
         self.wm_mask = mask_dilation(self.data_handler.wm_mask)
         self.fa_map = self.data_handler.fa_map
@@ -78,7 +79,8 @@ class Tracker(nn.Module):
     
     def track(self):
         # Generate seed points as the starting points of the tracking
-        seed_points = init_seeds(self.wm_mask, self.num_seeds, self.affine, self.max_sequence_length)
+        seed_points = init_seeds(self.wm_mask, self.num_seeds, self.affine, self.max_sequence_length, self)
+        self.num_seeds = seed_points.size(0) # FOR DEBUG
         all_streamlines = []
         sphere = get_sphere('repulsion724')
 

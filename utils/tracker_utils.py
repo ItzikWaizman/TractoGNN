@@ -45,8 +45,15 @@ def get_next_step_from_fodf(fodf, streamlines, step, sphere, step_size, tracker)
 
     return next_positions, terminated_streamlines
 
-def init_seeds(wm_mask, num_of_seeds, affine, max_seq_length):
+def init_seeds(wm_mask, num_of_seeds, affine, max_seq_length, tracker=None, debug_mode=True):
     seeds = torch.zeros(num_of_seeds, max_seq_length, 3)
+
+    if debug_mode is True:
+        seeds = torch.zeros(tracker.tractogram.size(0), max_seq_length, 3)
+        seeds[:, 0, :] = tracker.tractogram[:,0, :]
+        return seeds
+
+
     white_matter_indices = torch.nonzero(wm_mask == 1)
     sampled_indices = white_matter_indices[torch.randint(len(white_matter_indices), (num_of_seeds,))]
     ras_coords = voxel_to_ras(sampled_indices, affine)
@@ -94,7 +101,7 @@ def calc_stopping_mask(tracker, streamlines, step):
     Returns:
     [batch_size]: Boolean mask to indicate which steramlines should be terminated.
     """
-
+    logger = tracker.logger
     # Get 3 last steps in the batch of streamlines.
     current_points = streamlines[:, step, :]
     previous_points = streamlines[:, step-1, :] if step > 0 else None

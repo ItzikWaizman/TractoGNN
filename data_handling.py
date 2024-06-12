@@ -16,10 +16,11 @@ class SubjectDataHandler(object):
         self.paths_dictionary = extract_subject_paths(self.get_subject_folder(mode, params))
         self.wm_mask = self.load_mask()
         self.dwi, self.fodf, self.affine, self.inverse_affine, self.fa_map = self.load_subject_data(mode)
+
+        self.logger.info("SubjectDataHandler: Preparing streamlines")
+        self.tractogram, self.lengths = prepare_streamlines_for_training(self)
         
         if mode is TRAIN or mode is VALIDATION:
-            self.logger.info("SubjectDataHandler: Preparing streamlines")
-            self.tractogram, self.lengths = prepare_streamlines_for_training(self)
             self.data_loader = self.create_dataloaders(batch_size=params['batch_size'])
             self.casuality_mask = torch.nn.Transformer.generate_square_subsequent_mask(self.tractogram.size(1))
         
