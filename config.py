@@ -18,7 +18,7 @@ class Parameters(object):
         self.params['nhead'] = 5
 
         # transformer_feed_forward_dim - Dimension of the feedforward network in TransformerEncoder layer.
-        self.params['transformer_feed_forward_dim'] = 400
+        self.params['transformer_feed_forward_dim'] = 256
 
         # dropout_rate - Probability to execute a dropout
         self.params['dropout_rate'] = 0.1
@@ -27,10 +27,10 @@ class Parameters(object):
         self.params['max_streamline_len'] = 150
 
         # output_size - Decoder output features size.
-        self.params['output_size'] = 725
+        self.params['output_size'] = 2
 
         # model_weights_save_dir - (string) Path for saving the model's files after training is done.
-        self.params['trained_model_path'] = "trained_model/model.pt"
+        self.params['trained_model_path'] = "trained_model/regression_model.pt"
 
         """ Training Parameters """
 

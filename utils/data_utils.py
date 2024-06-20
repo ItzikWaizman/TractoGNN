@@ -149,3 +149,33 @@ def generate_labels(streamline, actual_length, sphere_points, EoF, sigma=0.1):
     fodfs_padded[:actual_length, :] = fodfs
 
     return fodfs_padded
+
+def calc_phi_theta_from_tractogram(tractogram, lengths, tractography_folder):
+
+    save_path = save_dir = os.path.join(tractography_folder, 'torch_phi_theta')
+    save_path = os.path.join(save_dir, 'phi_theta.pt')
+    if os.path.exists(save_path):
+        data = torch.load(save_path)
+        return torch.stack((data['phi'], data['theta']), dim=2)
+    
+    os.makedirs(save_dir, exist_ok=True)
+    
+    # Calculate direction unit vectors between consecutive points
+    directions = tractogram[:, 1:, :] - tractogram[:, :-1, :]
+    directions = directions / directions.norm(dim=2, keepdim=True)
+
+    x = directions[:, :, 0]
+    y = directions[:, :, 1]
+    z = directions[:, :, 2]
+
+    phi = torch.atan2(y, x)
+    theta = torch.acos(z)
+
+    for i, length in enumerate(lengths):
+            phi[i, length-1:] = 0
+            theta[i, length-1:] = 0
+
+    torch.save({'phi': phi, 'theta': theta}, save_path)
+
+    spherical_coords = torch.stack((phi, theta), dim=2)
+    return spherical_coords

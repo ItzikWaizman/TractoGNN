@@ -18,6 +18,7 @@ class SubjectDataHandler(object):
 
         self.logger.info("SubjectDataHandler: Preparing streamlines")
         self.tractogram, self.lengths = prepare_streamlines_for_training(self)
+        self.phi_theta = calc_phi_theta_from_tractogram(self.tractogram, self.lengths, self.paths_dictionary['tractography_folder'])
         
         if mode is TRAIN or mode is VALIDATION or TRACK:
             self.data_loader = self.create_dataloaders(batch_size=params['batch_size'])
@@ -54,26 +55,20 @@ class SubjectDataHandler(object):
         return mask
     
     def create_dataloaders(self, batch_size):
-        dataset = StreamlineDataset(self.tractogram, self.lengths, self.inverse_affine, self.mode)
+        dataset = StreamlineDataset(self.tractogram, self.lengths, self.phi_theta, self.inverse_affine, self.mode)
         data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
         
         return data_loader
 
 class StreamlineDataset(Dataset):
-    def __init__(self, streamlines, lengths, inverse_affine, mode):
+    def __init__(self, streamlines, lengths, phi_theta, inverse_affine, mode):
         permutation = torch.arange(0, streamlines.size(0)-1)
         permutation = permutation[torch.randperm(permutation.size(0))]
 
         self.streamlines = streamlines[permutation[0:100000]] if mode is TRAIN else streamlines[permutation[0:10000]]
         self.lengths = lengths[permutation[0:100000]] if mode is TRAIN else lengths[permutation[0:10000]]
+        self.phi_theta = phi_theta[permutation[0:100000]] if mode is TRAIN else phi_theta[permutation[0:10000]]
 
-        sphere = get_sphere('repulsion724')
-        self.sphere_points = torch.zeros((725, 3), dtype=torch.float32)
-        self.sphere_points[:724, :] = torch.tensor(sphere.vertices)
-
-        EoF = torch.zeros(725, dtype=torch.float32)
-        EoF[724] = 1
-        self.EoF = EoF
         self.inverse_affine = inverse_affine
 
     def __len__(self):
@@ -90,6 +85,6 @@ class StreamlineDataset(Dataset):
         streamline = self.streamlines[idx]
         streamline_voxels = ras_to_voxel(streamline, inverse_affine=self.inverse_affine)
         seq_length = self.lengths[idx]
-        label = generate_labels(streamline, seq_length, self.sphere_points, self.EoF)
+        label = self.phi_theta[idx]
         padding_mask = torch.arange(streamline.size(0)) >= seq_length
         return streamline_voxels, label, seq_length, padding_mask

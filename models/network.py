@@ -42,9 +42,8 @@ class TractoTransformer(nn.Module):
             x = decoder_layer(x, causality_mask, padding_mask)
 
         outputs = self.projection(x)
-        log_probabilities = F.log_softmax(outputs, dim=-1)
 
-        return log_probabilities
+        return outputs
 
 
 class TransformerDecoderBlock(nn.Module):
