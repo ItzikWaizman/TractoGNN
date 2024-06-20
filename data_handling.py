@@ -1,6 +1,5 @@
 import nibabel as nib
 from dipy.data import get_sphere
-from torch_geometric.data import Data
 from torch.utils.data import Dataset, DataLoader
 from utils.data_utils import *
 from utils.common_utils import *
@@ -22,7 +21,7 @@ class SubjectDataHandler(object):
         
         if mode is TRAIN or mode is VALIDATION or TRACK:
             self.data_loader = self.create_dataloaders(batch_size=params['batch_size'])
-            self.casuality_mask = torch.nn.Transformer.generate_square_subsequent_mask(self.tractogram.size(1))
+            self.causality_mask  = torch.triu(torch.ones(self.tractogram.size(1), self.tractogram.size(1)), diagonal=1).bool()
         
     def get_subject_folder(self, mode, params):
         if mode == TRAIN:
@@ -32,20 +31,12 @@ class SubjectDataHandler(object):
         else:
             return params['test_subject_folder']
 
-    def get_voxel_index_maps(self):
-        # Create a map between node index to white matter voxel.
-        index_to_voxel = torch.nonzero(self.wm_mask)
-        # Create the inverse map between white matter voxel to node index.
-        voxel_to_index = {(row[0].item(), row[1].item(), row[2].item()): i for i, row in enumerate(index_to_voxel)}
-
-        return index_to_voxel, voxel_to_index
-
     def load_subject_data(self, mode):
         dwi_sh = nib.load(self.paths_dictionary['sh'])
         fodf_sh = nib.load(self.paths_dictionary['fodf'])
 
         fa_map = nib.load(self.paths_dictionary['fa'])
-        fa_map = torch.tensor(fa_map.get_fdata(), dtype=torch.float32)
+        fa_map = torch.tensor(fa_map.get_fdata(), dtype=torch.float32) if mode is TRACK else None
 
         affine = torch.tensor(dwi_sh.affine, dtype=torch.float32)
         dwi_sh_data = torch.tensor(dwi_sh.get_fdata(), dtype=torch.float32)
@@ -55,18 +46,6 @@ class SubjectDataHandler(object):
         fodf_data = sample_signal_from_sh(fodf_sh_data, sh_order=8, sphere=get_sphere('repulsion724')) if mode is TRACK else None
         return dwi_data, fodf_data, affine, torch.inverse(affine), fa_map
 
-    def calc_means(self, dwi):
-        DW_means = torch.zeros(dwi.shape[3])
-        DW_stds = torch.zeros(dwi.shape[3])
-        mask = self.wm_mask
-
-        for i in range(len(DW_means)):
-            curr_volume = dwi[:, :, :, i]
-            curr_volume = curr_volume[mask > 0]
-            DW_means[i] = torch.mean(curr_volume)
-            DW_stds[i] = torch.std(curr_volume)
-
-        return DW_means, DW_stds
 
     def load_mask(self):
         mask_path = self.paths_dictionary['wm_mask']

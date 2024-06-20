@@ -21,7 +21,7 @@ class Parameters(object):
         self.params['transformer_feed_forward_dim'] = 400
 
         # dropout_rate - Probability to execute a dropout
-        self.params['dropout_rate'] = 0.3
+        self.params['dropout_rate'] = 0.1
 
         # max_streamline_len - Upper bound of an expected streamline length. Used for positional encoding.
         self.params['max_streamline_len'] = 150
@@ -72,11 +72,11 @@ class Parameters(object):
         """ Data Parameters """
 
         # subject_folder - (string) Path to subject folder containing related data
-        self.params['train_subject_folder'] = 'sub-1013'
+        self.params['train_subject_folder'] = '/home/itzikwei/tract_inferno_dataset/trainset/sub-1013'
 
-        self.params['val_subject_folder'] = 'sub-1006'
+        self.params['val_subject_folder'] = '/home/itzikwei/tract_inferno_dataset/validset/sub-1008'
         
-        self.params['test_subject_folder'] = 'sub-1013'
+        self.params['test_subject_folder'] = '/home/itzikwei/tract_inferno_dataset/testset/sub-1006'
 
         self.params['num_of_gradients'] = 100
         

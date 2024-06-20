@@ -1,6 +1,5 @@
 import torch.nn as nn
 import torch.nn.functional as F
-from torch_geometric.nn import GCNConv
 from torch.nn import TransformerEncoder, TransformerEncoderLayer, TransformerDecoderLayer, TransformerDecoder
 from utils.model_utils import *
 
@@ -34,10 +33,10 @@ class TractoTransformer(nn.Module):
         - probabilities: Tensor of shape [batch_size, max_sequence_length, 725] modeling the estimated fodfs.
         """       
         # Fetch the features of each point in the streamlines:
-        x = dwi_data[streamline_voxels_batch[:, :, 0], streamline_voxels_batch[:, :, 1], streamline_voxels_batch[:, :, 2]]
+        y = dwi_data[streamline_voxels_batch[:, :, 0], streamline_voxels_batch[:, :, 1], streamline_voxels_batch[:, :, 2]]
 
         # Apply positional encoding
-        x = self.dropout(self.positional_encoding(x))
+        x = self.dropout(self.positional_encoding(y))
         
         for decoder_layer in self.decoder_layers:
             x = decoder_layer(x, causality_mask, padding_mask)
@@ -59,7 +58,7 @@ class TransformerDecoderBlock(nn.Module):
 
     def forward(self, x, causality_mask, padding_mask):
         # Self-attention with masking
-        attn_output, _ = self.self_attn(x, x, x, attn_mask=causality_mask, key_padding_mask=padding_mask)
+        attn_output, _ = self.self_attn(x, x, x, attn_mask=causality_mask, key_padding_mask=padding_mask, is_causal=True)
         x = x + self.dropout(attn_output)
         x = self.layer_norm1(x)
 
@@ -106,5 +105,5 @@ class PositionalEncoding(nn.Module):
         Returns:
             Tensor: The input tensor augmented with positional encodings.
         """
-        return x + self.encoding[:, :].to(x.device).unsqueeze(0)
+        return x + self.encoding[:x.size(1), :].to(x.device).unsqueeze(0)
     

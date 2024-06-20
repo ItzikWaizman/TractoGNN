@@ -105,7 +105,7 @@ def prepare_streamlines_for_training(subject, save_dir_name="torch_streamlines",
         torch_streamlines.append(torch_streamline)
 
     max_seq_len = max(len(sl) for sl in torch_streamlines)
-    padded_streamlines = torch.zeros(len(torch_streamlines) + 1,max_seq_len, 3)
+    padded_streamlines = torch.zeros(len(torch_streamlines), max_seq_len + 1, 3)
 
     for i, streamline in enumerate(torch_streamlines):
         length = len(streamline)

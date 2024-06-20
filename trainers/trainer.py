@@ -14,13 +14,13 @@ class TractoGNNTrainer(object):
         self.network = TractoTransformer(logger=logger, params=params).to(self.device)
         self.train_data_handler = SubjectDataHandler(logger=logger, params=params, mode=TRAIN)
         self.val_data_handler = SubjectDataHandler(logger=logger, params=params, mode=VALIDATION)
-        self.train_dwi_data = self.train_data_handler.dwi
-        self.val_dwi_data = self.val_data_handler.dwi
+        self.train_dwi_data = self.train_data_handler.dwi.to(self.device)
+        self.val_dwi_data = self.val_data_handler.dwi.to(self.device)
         self.optimizer = Adam(self.network.parameters(), lr=params['learning_rate'])
         self.num_epochs = params['epochs']
         self.criterion = nn.KLDivLoss(reduction='none')
-        self.train_casuality_mask = self.train_data_handler.casuality_mask.to(self.device)
-        self.val_casuality_mask = self.val_data_handler.casuality_mask.to(self.device)
+        self.train_causality_mask = self.train_data_handler.causality_mask.to(self.device)
+        self.val_causality_mask = self.val_data_handler.causality_mask.to(self.device)
         self.trained_model_path = params['trained_model_path']
         self.params = params
     
@@ -61,7 +61,7 @@ class TractoGNNTrainer(object):
                 padding_mask = padding_mask.to(self.device)
 
                 # Forward pass
-                outputs = self.network(self.train_dwi_data, streamline_voxels_batch, padding_mask, self.train_casuality_mask)
+                outputs = self.network(self.train_dwi_data, streamline_voxels_batch, padding_mask, self.train_causality_mask)
                 loss = self.calc_loss(outputs, labels, ~padding_mask) / lengths.sum()
 
                 # Backward and optimize
@@ -84,7 +84,7 @@ class TractoGNNTrainer(object):
                                           'acc': acc_top_1.item(),
                                           f'top{self.params["k"]}': acc_top_k.item()})
 
-        return total_loss, acc_top_1, acc_top_k
+        return total_loss / len(data_loader), acc_top_1, acc_top_k
 
     def validate(self, data_loader):
         self.logger.info("TractoGNNTrainer: Validation phase")
@@ -97,7 +97,7 @@ class TractoGNNTrainer(object):
                 padding_mask = padding_mask.to(self.device)
 
                 # Forward pass
-                outputs = self.network(self.val_dwi_data, streamline_voxels_batch, padding_mask, self.val_casuality_mask)
+                outputs = self.network(self.val_dwi_data, streamline_voxels_batch, padding_mask, self.val_causality_mask)
                 loss = self.calc_loss(outputs, labels, ~padding_mask) / lengths.sum()
 
                 curr_loss = loss.item()
@@ -111,7 +111,7 @@ class TractoGNNTrainer(object):
                 acc_top_1 = torch.sum(correct_top_1 * (~padding_mask)) / lengths.sum()
                 acc_top_k = torch.sum(correct_top_k * (~padding_mask)) / lengths.sum()
 
-        return total_loss, acc_top_1.item(), acc_top_k.item()
+        return total_loss / len(data_loader), acc_top_1.item(), acc_top_k.item()
 
     def train(self):
         train_stats, val_stats = [], []
@@ -125,5 +125,8 @@ class TractoGNNTrainer(object):
 
             self.logger.info(f'Epoch {epoch + 1}/{self.num_epochs}, Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}, '
                              f'Val Acc: {val_acc:.4f}, Val Top {self.params["k"]} Acc: {val_acc_top_k:.4f}')
+            if epoch % 2:
+                torch.save(self.network.state_dict, self.trained_model_path)
+
         torch.save(self.network.state_dict, self.trained_model_path)
         return train_stats, val_stats
