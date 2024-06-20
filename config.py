@@ -8,14 +8,17 @@ class Parameters(object):
 
         """ Model Parameters """
 
-        # num_transformer_encoder_layers - Number of transformer encoder layers will be used for TractoGNN decoder.
-        self.params['num_transformer_encoder_layers'] = 8
+        # num_transformer_encoder_layers - Number of transformer encoder layers.
+        self.params['num_transformer_encoder_layers'] = 6
+
+        # num_transformer_decoder_layers - Number of transformer decoder layers.
+        self.params['num_transformer_decoder_layers'] = 6
 
         # nhead - Number of heads in the Multi Head Self Attention mechanism of the TransformerEncoderLayer.
-        self.params['nhead'] = 8
+        self.params['nhead'] = 5
 
         # transformer_feed_forward_dim - Dimension of the feedforward network in TransformerEncoder layer.
-        self.params['transformer_feed_forward_dim'] = 512
+        self.params['transformer_feed_forward_dim'] = 400
 
         # dropout_rate - Probability to execute a dropout
         self.params['dropout_rate'] = 0.3

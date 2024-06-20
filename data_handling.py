@@ -22,7 +22,6 @@ class SubjectDataHandler(object):
         
         if mode is TRAIN or mode is VALIDATION or TRACK:
             self.data_loader = self.create_dataloaders(batch_size=params['batch_size'])
-            debug_batch = next(iter(self.data_loader))
             self.casuality_mask = torch.nn.Transformer.generate_square_subsequent_mask(self.tractogram.size(1))
         
     def get_subject_folder(self, mode, params):
@@ -53,7 +52,7 @@ class SubjectDataHandler(object):
         fodf_sh_data = torch.tensor(fodf_sh.get_fdata(), dtype=torch.float32)
 
         dwi_data = sample_signal_from_sh(dwi_sh_data, sh_order=6, sphere=get_sphere('repulsion100'))
-        fodf_data = None #sample_signal_from_sh(fodf_sh_data, sh_order=8, sphere=get_sphere('repulsion724')) if mode is TRACK else None
+        fodf_data = sample_signal_from_sh(fodf_sh_data, sh_order=8, sphere=get_sphere('repulsion724')) if mode is TRACK else None
         return dwi_data, fodf_data, affine, torch.inverse(affine), fa_map
 
     def calc_means(self, dwi):

@@ -28,11 +28,11 @@ if __name__ == '__main__':
     params = Parameters().params
 
 
-    if False:
+    if True:
         logger.info("Staring training setups")
         trainer = TractoGNNTrainer(logger=logger, params=params)
         train_stats, val_stats = trainer.train()
 
-    if True:
+    if False:
         tracker = Tracker(logger=logger, params=params)
         tracker.track()
