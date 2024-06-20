@@ -62,7 +62,7 @@ def sample_signal_from_sh(data_sh, sh_order, sphere):
 
 def ras_to_voxel(ras_coords, inverse_affine):
     # Convert ras_coords from NumPy array to PyTorch tensor
-    ras_coords_tensor = torch.tensor(ras_coords, dtype=torch.float32)
+    ras_coords_tensor = ras_coords if isinstance(ras_coords, torch.Tensor) else torch.tensor(ras_coords, dtype=torch.float32)
     
     # Append a column of ones for homogeneous coordinates
     ones_column = torch.ones((ras_coords_tensor.shape[0], 1), dtype=torch.float32)
@@ -174,7 +174,7 @@ def generate_labels(streamline, actual_length, sphere_points, EoF, sigma=0.1):
     fodfs = gaussian_weights / gaussian_weights.sum(dim=1, keepdim=True)
     fodfs[actual_length-1, :] = EoF # Set the fodf of the last point to be the fodf of EoF
 
-    fodfs_padded = torch.zeros((padded_length, 725, 3))
-    fodfs_padded[:actual_length, :, :] = fodfs
+    fodfs_padded = torch.zeros((padded_length, 725))
+    fodfs_padded[:actual_length, :] = fodfs
 
     return fodfs_padded

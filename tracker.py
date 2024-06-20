@@ -2,10 +2,12 @@ import torch
 import torch.nn as nn
 import nibabel as nib
 from nibabel.streamlines import Tractogram
+from nibabel.streamlines.trk import *
 from data_handling import *
 #from models.network import TractoTransformer
 from models.debug_model import DebugModel
 from utils.tracker_utils import *
+
 
 
 class Tracker(nn.Module):
@@ -93,7 +95,20 @@ class Tracker(nn.Module):
 
         filtered_streamlines = filter_short_streamlines(all_streamlines, self.min_streamline_length)
         tractogram = Tractogram(streamlines=filtered_streamlines, affine_to_rasmm=self.affine)
-        trk_file = nib.streamlines.TrkFile(tractogram)
+
+
+        header = np.zeros((), dtype=header_2_dtype)
+        header[Field.MAGIC_NUMBER] = b'TRACK'
+        header[Field.VOXEL_SIZES] = np.array((1, 1, 1), dtype='f4')
+        header[Field.DIMENSIONS] = np.array((self.wm_mask.size(0), self.wm_mask.size(1), self.wm_mask.size(2)), dtype='h')
+        header[Field.VOXEL_TO_RASMM] = self.affine.numpy()
+        header[Field.VOXEL_ORDER] = b'RAS'
+        header['version'] = 2
+        header['hdr_size'] = 1000
+        header = dict(zip(header.dtype.names, header.tolist()))
+
+
+        trk_file = nib.streamlines.TrkFile(tractogram, header=header)
         if self.save_tracking:
             nib.streamlines.save(trk_file, self.trk_file_path)
         

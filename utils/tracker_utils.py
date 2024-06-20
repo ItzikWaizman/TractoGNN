@@ -101,7 +101,6 @@ def calc_stopping_mask(tracker, streamlines, step):
     Returns:
     [batch_size]: Boolean mask to indicate which steramlines should be terminated.
     """
-    logger = tracker.logger
     # Get 3 last steps in the batch of streamlines.
     current_points = streamlines[:, step, :]
     previous_points = streamlines[:, step-1, :] if step > 0 else None

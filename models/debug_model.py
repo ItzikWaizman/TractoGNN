@@ -3,11 +3,13 @@ import nibabel as nib
 from utils.model_utils import *
 from utils.data_utils import *
 from utils.common_utils import *
+from dipy.data import get_sphere
 
 class DebugModel(nn.Module):
     def __init__(self, fodf, affine, inverse_affine):
         super(DebugModel, self).__init__()
         self.fodf, self.affine, self.inverse_affine = fodf, affine, inverse_affine
+        self.sphere = get_sphere('repulsion724')
            
     def forward(self, streamlines, padding_mask, step):
         ras_coords = streamlines[:, step, :]

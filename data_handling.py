@@ -20,8 +20,9 @@ class SubjectDataHandler(object):
         self.logger.info("SubjectDataHandler: Preparing streamlines")
         self.tractogram, self.lengths = prepare_streamlines_for_training(self)
         
-        if mode is TRAIN or mode is VALIDATION:
+        if mode is TRAIN or mode is VALIDATION or TRACK:
             self.data_loader = self.create_dataloaders(batch_size=params['batch_size'])
+            debug_batch = next(iter(self.data_loader))
             self.casuality_mask = torch.nn.Transformer.generate_square_subsequent_mask(self.tractogram.size(1))
         
     def get_subject_folder(self, mode, params):
@@ -52,7 +53,7 @@ class SubjectDataHandler(object):
         fodf_sh_data = torch.tensor(fodf_sh.get_fdata(), dtype=torch.float32)
 
         dwi_data = sample_signal_from_sh(dwi_sh_data, sh_order=6, sphere=get_sphere('repulsion100'))
-        fodf_data = sample_signal_from_sh(fodf_sh_data, sh_order=8, sphere=get_sphere('repulsion724')) if mode is TRACK else None
+        fodf_data = None #sample_signal_from_sh(fodf_sh_data, sh_order=8, sphere=get_sphere('repulsion724')) if mode is TRACK else None
         return dwi_data, fodf_data, affine, torch.inverse(affine), fa_map
 
     def calc_means(self, dwi):
@@ -75,14 +76,14 @@ class SubjectDataHandler(object):
         return mask
     
     def create_dataloaders(self, batch_size):
-        dataset = StreamlineDataset(self.tractogram, self.lengths, self.mode)
-        data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True if self.train else False)
+        dataset = StreamlineDataset(self.tractogram, self.lengths, self.inverse_affine, self.mode)
+        data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
         
         return data_loader
 
 class StreamlineDataset(Dataset):
-    def __init__(self, streamlines, lengths, mode):
-        permutation = torch.arange(0, streamlines.size(0))
+    def __init__(self, streamlines, lengths, inverse_affine, mode):
+        permutation = torch.arange(0, streamlines.size(0)-1)
         permutation = permutation[torch.randperm(permutation.size(0))]
 
         self.streamlines = streamlines[permutation[0:100000]] if mode is TRAIN else streamlines[permutation[0:10000]]
@@ -90,11 +91,12 @@ class StreamlineDataset(Dataset):
 
         sphere = get_sphere('repulsion724')
         self.sphere_points = torch.zeros((725, 3), dtype=torch.float32)
-        self.sphere_points[:724, :] = sphere
+        self.sphere_points[:724, :] = torch.tensor(sphere.vertices)
 
         EoF = torch.zeros(725, dtype=torch.float32)
         EoF[724] = 1
         self.EoF = EoF
+        self.inverse_affine = inverse_affine
 
     def __len__(self):
         return len(self.streamlines)
@@ -108,7 +110,7 @@ class StreamlineDataset(Dataset):
         - tuple: (streamline, label, seq_length, padding_mask)
         """
         streamline = self.streamlines[idx]
-        streamline_voxels = ras_to_voxel(streamline)
+        streamline_voxels = ras_to_voxel(streamline, inverse_affine=self.inverse_affine)
         seq_length = self.lengths[idx]
         label = generate_labels(streamline, seq_length, self.sphere_points, self.EoF)
         padding_mask = torch.arange(streamline.size(0)) >= seq_length
