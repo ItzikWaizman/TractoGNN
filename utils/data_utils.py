@@ -59,35 +59,6 @@ def sample_signal_from_sh(data_sh, sh_order, sphere):
     data_sampled = data_sampled.reshape(X,Y,Z, -1)
     return data_sampled
 
-
-def ras_to_voxel(ras_coords, inverse_affine):
-    # Convert ras_coords from NumPy array to PyTorch tensor
-    ras_coords_tensor = ras_coords if isinstance(ras_coords, torch.Tensor) else torch.tensor(ras_coords, dtype=torch.float32)
-    
-    # Append a column of ones for homogeneous coordinates
-    ones_column = torch.ones((ras_coords_tensor.shape[0], 1), dtype=torch.float32)
-    ras_homogeneous = torch.cat((ras_coords_tensor, ones_column), dim=1)
-
-    # Apply inverse affine transformation to convert RAS to voxel coordinates
-    voxel_coords_homogeneous = torch.matmul(ras_homogeneous, inverse_affine.T)
-
-    # Remove homogeneous coordinate and round to get voxel indices
-    voxel_coords = torch.round(voxel_coords_homogeneous[:, :3]).to(torch.int)
-    return voxel_coords
-
-
-def voxel_to_ras(voxel_indices, affine):
-    # Add a 1 for homogeneous coordinates
-    ones_column = torch.ones(voxel_indices.shape[0], 1, dtype=torch.float32)
-    voxel_homogeneous = torch.cat((voxel_indices, ones_column), dim=1)
-
-    # Perform affine transformation
-    ras_coords_homogeneous = torch.matmul(affine, voxel_homogeneous.T).T
-
-    ras_coords = ras_coords_homogeneous[:, :3]
-    return ras_coords
-
-
 def load_tractogram(tractography_folder):
     folder_path = tractography_folder
 

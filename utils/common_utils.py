@@ -15,20 +15,10 @@ def generate_unit_sphere_points(num_points=1000):
     z = torch.cos(phi)
     return torch.stack([x, y, z], dim=1)
 
-def voxel_to_ras(voxel_indices, affine):
-    # Add a 1 for homogeneous coordinates
-    ones_column = torch.ones(voxel_indices.shape[0], 1, dtype=torch.float32)
-    voxel_homogeneous = torch.cat((voxel_indices, ones_column), dim=1)
-
-    # Perform affine transformation
-    ras_coords_homogeneous = torch.matmul(affine, voxel_homogeneous.T).T
-
-    ras_coords = ras_coords_homogeneous[:, :3]
-    return ras_coords
 
 def ras_to_voxel(ras_coords, inverse_affine):
     # Convert ras_coords from NumPy array to PyTorch tensor
-    ras_coords_tensor = torch.tensor(ras_coords, dtype=torch.float32)
+    ras_coords_tensor = ras_coords if isinstance(ras_coords, torch.Tensor) else torch.tensor(ras_coords, dtype=torch.float32)
     
     # Append a column of ones for homogeneous coordinates
     ones_column = torch.ones((ras_coords_tensor.shape[0], 1), dtype=torch.float32)
@@ -41,6 +31,17 @@ def ras_to_voxel(ras_coords, inverse_affine):
     voxel_coords = torch.round(voxel_coords_homogeneous[:, :3]).to(torch.int)
     return voxel_coords
 
+
+def voxel_to_ras(voxel_indices, affine):
+    # Add a 1 for homogeneous coordinates
+    ones_column = torch.ones(voxel_indices.shape[0], 1, dtype=torch.float32)
+    voxel_homogeneous = torch.cat((voxel_indices, ones_column), dim=1)
+
+    # Perform affine transformation
+    ras_coords_homogeneous = torch.matmul(affine, voxel_homogeneous.T).T
+
+    ras_coords = ras_coords_homogeneous[:, :3]
+    return ras_coords
 
 
 def plot_distribution_on_sphere_dipy(sphere, intensity):
