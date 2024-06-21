@@ -3,7 +3,6 @@ from dipy.data import get_sphere
 from torch.utils.data import Dataset, DataLoader
 from utils.data_utils import *
 from utils.common_utils import *
-
 # Data Handler Modes
 TRAIN, VALIDATION, TRACK = 0, 1, 2
 
@@ -55,20 +54,20 @@ class SubjectDataHandler(object):
         return mask
     
     def create_dataloaders(self, batch_size):
-        dataset = StreamlineDataset(self.tractogram, self.lengths, self.phi_theta, self.inverse_affine, self.mode)
+        dataset = StreamlineDataset(self.dwi.shape, self.tractogram, self.lengths, self.phi_theta, self.inverse_affine, self.mode)
         data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
         
         return data_loader
 
 class StreamlineDataset(Dataset):
-    def __init__(self, streamlines, lengths, phi_theta, inverse_affine, mode):
+    def __init__(self, shape, streamlines, lengths, phi_theta, inverse_affine, mode):
         permutation = torch.arange(0, streamlines.size(0)-1)
         permutation = permutation[torch.randperm(permutation.size(0))]
 
         self.streamlines = streamlines[permutation[0:1000]] if mode is TRAIN else streamlines[permutation[0:1000]]
         self.lengths = lengths[permutation[0:1000]] if mode is TRAIN else lengths[permutation[0:1000]]
         self.phi_theta = phi_theta[permutation[0:1000]] if mode is TRAIN else phi_theta[permutation[0:1000]]
-
+        self.dwi_shape = shape
         self.inverse_affine = inverse_affine
 
     def __len__(self):
@@ -84,7 +83,8 @@ class StreamlineDataset(Dataset):
         """
         streamline = self.streamlines[idx]
         streamline_voxels = ras_to_voxel(streamline, inverse_affine=self.inverse_affine)
+        streamline_ids = voxel_to_id(streamline_voxels, self.dwi_shape)
         seq_length = self.lengths[idx]
         label = self.phi_theta[idx]
         padding_mask = torch.arange(streamline.size(0)) >= (seq_length-1)
-        return streamline_voxels, label, seq_length, padding_mask
+        return streamline_voxels, streamline_ids, label , padding_mask

@@ -11,31 +11,25 @@ class TractoTransformer(nn.Module):
         logger.info("Create TractoGNN model object")
 
         # Build decoder-only transformer model
+        self.embedding = nn.Embedding(3600000, params['num_of_gradients'])
         self.positional_encoding = PositionalEncoding(d_model=params['num_of_gradients'], max_len=params['max_streamline_len'])
-        self.decoder_layers = nn.ModuleList([TransformerDecoderBlock(embed_dim=params['num_of_gradients'],
-                                                                     num_heads=params['nhead'],
-                                                                     ff_dim=params['transformer_feed_forward_dim'],
-                                                                     dropout=params['dropout_rate']) for _ in range(params['num_transformer_decoder_layers'])])
+        
+        decoder_layer = TransformerDecoderLayer(d_model=params['num_of_gradients'],
+                                                nhead=params['nhead'],
+                                                dim_feedforward=params['transformer_feed_forward_dim'],
+                                                dropout=params['dropout_rate'],
+                                                batch_first=True)
+        
+        self.decoder = TransformerDecoder(decoder_layer, params['num_transformer_decoder_layers'])
+        
         
         # Use Linear network as a projection to output_size.
         self.projection = nn.Linear(params['num_of_gradients'], params['output_size'])
         self.dropout = nn.Dropout(params['dropout_rate'])
 
-        self._initialize_weights()
 
-    def _initialize_weights(self):
-        # Initialize the weights of the fully connected layer
-        init.xavier_uniform_(self.projection.weight)
-        if self.projection.bias is not None:
-            init.zeros_(self.projection.bias)
         
-        # Initialize the transformer decoder layer weights
-        for layer in self.decoder_layers:
-            for param in layer.parameters():
-                if param.dim() > 1:
-                    init.xavier_uniform_(param)
-        
-    def forward(self, dwi_data, streamline_voxels_batch, padding_mask, causality_mask):
+    def forward(self, dwi_data, streamline_voxels_batch, streamline_ids, padding_mask, causality_mask):
         """
         Parameters:
         - dwi_data - 4d image holding the diffusion mri data.
@@ -48,60 +42,18 @@ class TractoTransformer(nn.Module):
         - probabilities: Tensor of shape [batch_size, max_sequence_length, 725] modeling the estimated fodfs.
         """       
         # Fetch the features of each point in the streamlines:
-        y = dwi_data[streamline_voxels_batch[:, :, 0], streamline_voxels_batch[:, :, 1], streamline_voxels_batch[:, :, 2]]
+        tgt_embeddings = self.embedding(streamline_ids)
+        memory = dwi_data[streamline_voxels_batch[:, :, 0], streamline_voxels_batch[:, :, 1], streamline_voxels_batch[:, :, 2]]
 
         # Apply positional encoding
-        x = self.dropout(self.positional_encoding(y))
+        x = self.dropout(self.positional_encoding(tgt_embeddings))
         
-        for decoder_layer in self.decoder_layers:
-            x = decoder_layer(x, causality_mask, padding_mask)
+        x = self.decoder(tgt=tgt_embeddings, memory=memory, tgt_mask=causality_mask, memory_mask=causality_mask,
+                         tgt_key_padding_mask=padding_mask, memory_key_padding_mask=padding_mask)
 
         outputs = self.projection(x)
 
         return outputs
-
-        # Normalize phi to be in the range [-pi, pi]
-        #phi = torch.tanh(outputs[..., 0]) * torch.pi
-
-        # Normalize theta to be in the range [0, pi]
-        #theta = torch.sigmoid(outputs[..., 1]) * torch.pi
-
-        #return torch.stack((phi, theta), dim=-1)
-    
-
-class TransformerDecoderBlock(nn.Module):
-    def __init__(self, embed_dim, num_heads, ff_dim, dropout=0.1):
-        super(TransformerDecoderBlock, self).__init__()
-        self.self_attn = nn.MultiheadAttention(embed_dim, num_heads, dropout=dropout, batch_first=True)
-        self.layer_norm1 = nn.LayerNorm(embed_dim)
-        self.layer_norm2 = nn.LayerNorm(embed_dim)
-        self.ff = PositionWiseFeedForward(embed_dim, ff_dim)
-        self.dropout = nn.Dropout(dropout)
-
-    def forward(self, x, causality_mask, padding_mask):
-        # Self-attention with masking
-        attn_output, _ = self.self_attn(x, x, x, attn_mask=causality_mask, key_padding_mask=padding_mask, is_causal=True)
-        x = x + self.dropout(attn_output)
-        x = self.layer_norm1(x)
-
-        # Feed-forward network
-        ff_output = self.ff(x)
-        x = x + self.dropout(ff_output)
-        x = self.layer_norm2(x)
-
-        return x
-
-
-class PositionWiseFeedForward(nn.Module):
-    def __init__(self, input_dim, latent_dim):
-        super(PositionWiseFeedForward, self).__init__()
-        self.fc1 = nn.Linear(input_dim, latent_dim)
-        self.fc2 = nn.Linear(latent_dim, input_dim)
-        self.relu = nn.ReLU()
-
-    def forward(self, x):
-        return self.fc2(self.relu(self.fc1(x)))
-    
 
 class PositionalEncoding(nn.Module):
     def __init__(self, d_model, max_len=150):

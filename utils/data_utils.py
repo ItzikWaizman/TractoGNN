@@ -179,3 +179,21 @@ def calc_phi_theta_from_tractogram(tractogram, lengths, tractography_folder):
 
     spherical_coords = torch.stack((phi, theta), dim=2)
     return spherical_coords
+
+def voxel_to_id(voxel_coords, shape):
+    """
+    Convert a batch of 3D voxel coordinates to 1D indices.
+    
+    Parameters:
+    - voxel_coords: Tensor of shape [batch_size, seq_len, 3]
+    - shape: Tuple representing the shape of the 3D volume (x_dim, y_dim, z_dim)
+    
+    Returns:
+    - Tensor of shape [batch_size, seq_len] containing the 1D indices.
+    """
+    x = voxel_coords[..., 0]
+    y = voxel_coords[..., 1]
+    z = voxel_coords[..., 2]
+
+    indices = z + y*shape[2] + x*shape[2]*shape[1]
+    return indices

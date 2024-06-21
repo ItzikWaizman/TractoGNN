@@ -63,13 +63,14 @@ class TractoGNNTrainer(object):
         total_loss = 0
         total_phi_error, total_theta_error, total_sphere_distance = 0, 0, 0
         with tqdm(data_loader, desc='Training', unit='batch') as progress_bar:
-            for streamline_voxels_batch, labels, lengths, padding_mask in progress_bar:
+            for streamline_voxels_batch, streamline_ids, labels, padding_mask in progress_bar:
                 labels = labels.to(self.device)
                 streamline_voxels_batch = streamline_voxels_batch.to(self.device)
+                streamline_ids = streamline_ids.to(self.device)
                 padding_mask = padding_mask.to(self.device)
 
                 # Forward pass
-                outputs = self.network(self.train_dwi_data, streamline_voxels_batch, padding_mask, self.train_causality_mask)
+                outputs = self.network(self.train_dwi_data, streamline_voxels_batch, streamline_ids, padding_mask, self.train_causality_mask)
                 loss = self.calc_loss(outputs, labels, ~padding_mask)
 
                 # Backward and optimize
@@ -103,13 +104,14 @@ class TractoGNNTrainer(object):
         total_loss = 0
         total_phi_error, total_theta_error, total_sphere_distance = 0, 0, 0
         with torch.no_grad():
-            for streamline_voxels_batch, labels, lengths, padding_mask in data_loader:
+            for streamline_voxels_batch, streamline_ids, labels, padding_mask in data_loader:
                 labels = labels.to(self.device)
                 streamline_voxels_batch = streamline_voxels_batch.to(self.device)
+                streamline_ids = streamline_ids.to(self.device)
                 padding_mask = padding_mask.to(self.device)
 
                 # Forward pass
-                outputs = self.network(self.val_dwi_data, streamline_voxels_batch, padding_mask, self.val_causality_mask)
+                outputs = self.network(self.val_dwi_data, streamline_voxels_batch, streamline_ids, padding_mask, self.val_causality_mask)
                 loss = self.calc_loss(outputs, labels, ~padding_mask)
 
                 total_loss += loss.item()
