@@ -2,6 +2,7 @@ import os
 import argparse
 import logging
 from config import Parameters
+from utils.trainer_utils import *
 from trainers.trainer import TractoGNNTrainer
 from tracker import Tracker
 
@@ -32,7 +33,8 @@ if __name__ == '__main__':
         logger.info("Staring training setups")
         trainer = TractoGNNTrainer(logger=logger, params=params)
         train_stats, val_stats = trainer.train()
+        plot_stats(train_stats, val_stats, params['epochs'], 'Regression over angular parameters')
 
     if False:
-        tracker = Tracker(logger=logger, params=params)
+        tracker = Tracker(logger=logger, params=params, debug=False)
         tracker.track()

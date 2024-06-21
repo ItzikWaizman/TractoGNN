@@ -1,5 +1,6 @@
 import torch.nn as nn
 import torch.nn.functional as F
+import torch.nn.init as init
 from torch.nn import TransformerEncoder, TransformerEncoderLayer, TransformerDecoderLayer, TransformerDecoder
 from utils.model_utils import *
 
@@ -19,6 +20,20 @@ class TractoTransformer(nn.Module):
         # Use Linear network as a projection to output_size.
         self.projection = nn.Linear(params['num_of_gradients'], params['output_size'])
         self.dropout = nn.Dropout(params['dropout_rate'])
+
+        self._initialize_weights()
+
+    def _initialize_weights(self):
+        # Initialize the weights of the fully connected layer
+        init.xavier_uniform_(self.projection.weight)
+        if self.projection.bias is not None:
+            init.zeros_(self.projection.bias)
+        
+        # Initialize the transformer decoder layer weights
+        for layer in self.decoder_layers:
+            for param in layer.parameters():
+                if param.dim() > 1:
+                    init.xavier_uniform_(param)
         
     def forward(self, dwi_data, streamline_voxels_batch, padding_mask, causality_mask):
         """
@@ -45,6 +60,14 @@ class TractoTransformer(nn.Module):
 
         return outputs
 
+        # Normalize phi to be in the range [-pi, pi]
+        #phi = torch.tanh(outputs[..., 0]) * torch.pi
+
+        # Normalize theta to be in the range [0, pi]
+        #theta = torch.sigmoid(outputs[..., 1]) * torch.pi
+
+        #return torch.stack((phi, theta), dim=-1)
+    
 
 class TransformerDecoderBlock(nn.Module):
     def __init__(self, embed_dim, num_heads, ff_dim, dropout=0.1):

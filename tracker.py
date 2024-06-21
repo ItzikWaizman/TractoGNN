@@ -14,8 +14,8 @@ class Tracker(nn.Module):
     def __init__(self, logger, params, debug=1):
         super(Tracker, self).__init__()
         
-        #if not debug:
-        #    self.load_model(params['trained_model_path'])
+        if not debug:
+            self.load_model(params['trained_model_path'])
         self.data_handler = SubjectDataHandler(logger=logger, params=params, mode=TRACK)
         self.tractogram = self.data_handler.tractogram # FOR DEBUG
         self.affine, self.inverse_affine = self.data_handler.affine, self.data_handler.inverse_affine

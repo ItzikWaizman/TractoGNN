@@ -65,9 +65,9 @@ class StreamlineDataset(Dataset):
         permutation = torch.arange(0, streamlines.size(0)-1)
         permutation = permutation[torch.randperm(permutation.size(0))]
 
-        self.streamlines = streamlines[permutation[0:100000]] if mode is TRAIN else streamlines[permutation[0:10000]]
-        self.lengths = lengths[permutation[0:100000]] if mode is TRAIN else lengths[permutation[0:10000]]
-        self.phi_theta = phi_theta[permutation[0:100000]] if mode is TRAIN else phi_theta[permutation[0:10000]]
+        self.streamlines = streamlines[permutation[0:1000]] if mode is TRAIN else streamlines[permutation[0:1000]]
+        self.lengths = lengths[permutation[0:1000]] if mode is TRAIN else lengths[permutation[0:1000]]
+        self.phi_theta = phi_theta[permutation[0:1000]] if mode is TRAIN else phi_theta[permutation[0:1000]]
 
         self.inverse_affine = inverse_affine
 
@@ -86,5 +86,5 @@ class StreamlineDataset(Dataset):
         streamline_voxels = ras_to_voxel(streamline, inverse_affine=self.inverse_affine)
         seq_length = self.lengths[idx]
         label = self.phi_theta[idx]
-        padding_mask = torch.arange(streamline.size(0)) >= seq_length
+        padding_mask = torch.arange(streamline.size(0)) >= (seq_length-1)
         return streamline_voxels, label, seq_length, padding_mask
