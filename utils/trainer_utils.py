@@ -79,3 +79,11 @@ def plot_stats(train_stats, val_stats, num_epochs, title):
     plt.tight_layout(rect=[0, 0, 1, 0.95])
     plt.show()
 
+def print_model_parameters(model):
+    total_params = 0
+    for name, param in model.named_parameters():
+        if param.requires_grad:
+            num_params = param.numel()
+            total_params += num_params
+            print(f"{name}: {num_params} parameters")
+    print(f"Total number of parameters: {total_params}")
