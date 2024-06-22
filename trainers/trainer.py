@@ -58,7 +58,7 @@ class TractoGNNTrainer(object):
         loss = masked_loss.sum()
 
         return loss
-        
+
     def train_epoch(self, data_loader):
         self.network.train()
         total_loss = 0
@@ -76,7 +76,7 @@ class TractoGNNTrainer(object):
                 self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
-        
+
                 curr_loss = loss.item()
                 total_loss += loss.item()
 
@@ -91,14 +91,9 @@ class TractoGNNTrainer(object):
                 progress_bar.set_postfix({'loss': curr_loss,
                                           'acc': acc_top_1.item(),
                                           f'top{self.params["k"]}': acc_top_k.item()})
-                
-        
+
+
         average_loss = total_loss / len(data_loader)
-
-        # After debug move to validation
-        if self.params['decay_LR']:
-            self.scheduler.step(average_loss)
-
 
         return average_loss, acc_top_1.item(), acc_top_k.item()
 
@@ -128,6 +123,9 @@ class TractoGNNTrainer(object):
                 acc_top_k = torch.sum(correct_top_k * (~padding_mask)) / lengths.sum()
 
         average_loss = total_loss / len(data_loader)
+
+        if self.params['decay_LR']:
+            self.scheduler.step(average_loss)
 
         return average_loss, acc_top_1.item(), acc_top_k.item()
 

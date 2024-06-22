@@ -64,8 +64,8 @@ class StreamlineDataset(Dataset):
         permutation = torch.arange(0, streamlines.size(0)-1)
         permutation = permutation[torch.randperm(permutation.size(0))]
 
-        self.streamlines = streamlines[permutation[0:1000]] if mode is TRAIN else streamlines[permutation[0:1000]]
-        self.lengths = lengths[permutation[0:1000]] if mode is TRAIN else lengths[permutation[0:1000]]
+        self.streamlines = streamlines[permutation[0:500000]] if mode is TRAIN else streamlines[permutation[0:20000]]
+        self.lengths = lengths[permutation[0:500000]] if mode is TRAIN else lengths[permutation[0:20000]]
 
         sphere = get_sphere('repulsion724')
         self.sphere_points = torch.zeros((725, 3), dtype=torch.float32)

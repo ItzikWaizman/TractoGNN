@@ -21,7 +21,7 @@ class Parameters(object):
         self.params['transformer_feed_forward_dim'] = 256
 
         # dropout_rate - Probability to execute a dropout
-        self.params['dropout_rate'] = 0.0
+        self.params['dropout_rate'] = 0.3
 
         # max_streamline_len - Upper bound of an expected streamline length. Used for positional encoding.
         self.params['max_streamline_len'] = 150
@@ -46,7 +46,7 @@ class Parameters(object):
         self.params['batch_size'] = 50
 
         # epochs - (int) Number of training epochs.
-        self.params['epochs'] = 700
+        self.params['epochs'] = 50
 
         # top k accuracy computation
         self.params['k'] = 7
@@ -56,7 +56,7 @@ class Parameters(object):
 
         # decay_LR_patience - (int) Number of training epochs to wait in case validation performance does not improve
         # before learning rate decay is applied.
-        self.params['decay_LR_patience'] = 75
+        self.params['decay_LR_patience'] = 5
 
         # decay_factor - (float [0, 1]) In an LR decay step, the existing LR will be multiplied by this factor.
         self.params['decay_factor'] = 0.8
