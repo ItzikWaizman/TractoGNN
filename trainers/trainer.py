@@ -24,7 +24,8 @@ class TractoGNNTrainer(object):
                                                               patience=params['decay_LR_patience'],
                                                               threshold=params['threshold'],
                                                               threshold_mode='abs',
-                                                              min_lr=params['min_lr'])
+                                                              min_lr=params['min_lr'],
+                                                              cooldown=5)
         self.num_epochs = params['epochs']
         self.criterion = nn.MSELoss(reduction='none')
         self.train_causality_mask = self.train_data_handler.causality_mask.to(self.device)
@@ -91,6 +92,9 @@ class TractoGNNTrainer(object):
                 progress_bar.set_postfix({'loss': curr_loss, 'phi_error(degrees)': phi_error.item(),
                                         'theta_error(degrees)': theta_error.item(),
                                         'sphere_distance(degrees)': sphere_distance.item()})
+        
+
+
 
         average_loss = total_loss / len(data_loader)
         average_phi_error = total_phi_error / len(data_loader)
@@ -128,9 +132,8 @@ class TractoGNNTrainer(object):
         average_theta_error = total_theta_error / len(data_loader)
         average_sphere_distance = total_sphere_distance / len(data_loader)
 
-        # Apply decay learning rate update if needed.
         if self.params['decay_LR']:
-            self.scheduler.step(average_sphere_distance)
+            self.scheduler.step(average_loss)
 
         return average_loss, average_phi_error, average_theta_error, average_sphere_distance
 

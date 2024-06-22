@@ -64,9 +64,9 @@ class StreamlineDataset(Dataset):
         permutation = torch.arange(0, streamlines.size(0)-1)
         permutation = permutation[torch.randperm(permutation.size(0))]
 
-        self.streamlines = streamlines[permutation[0:1000]] if mode is TRAIN else streamlines[permutation[0:1000]]
-        self.lengths = lengths[permutation[0:1000]] if mode is TRAIN else lengths[permutation[0:1000]]
-        self.phi_theta = phi_theta[permutation[0:1000]] if mode is TRAIN else phi_theta[permutation[0:1000]]
+        self.streamlines = streamlines [permutation[0:700000]] if mode is TRAIN else streamlines[permutation[0:20000]]
+        self.lengths = lengths [permutation[0:700000]] if mode is TRAIN else lengths[permutation[0:20000]]
+        self.phi_theta = phi_theta [permutation[0:700000]] if mode is TRAIN else phi_theta[permutation[0:20000]]
         self.dwi_shape = shape
         self.inverse_affine = inverse_affine
 
