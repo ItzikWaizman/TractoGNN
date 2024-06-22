@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from tqdm import tqdm
 from torch.optim import Adam
+import torch.optim as optim
 from models.network import TractoTransformer
 from data_handling import *
 
@@ -17,6 +18,13 @@ class TractoGNNTrainer(object):
         self.train_dwi_data = self.train_data_handler.dwi.to(self.device)
         self.val_dwi_data = self.val_data_handler.dwi.to(self.device)
         self.optimizer = Adam(self.network.parameters(), lr=params['learning_rate'])
+        self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode='max',
+                                                              factor=params['decay_factor'],
+                                                              patience=params['decay_LR_patience'],
+                                                              threshold=params['threshold'],
+                                                              threshold_mode='abs',
+                                                              min_lr=params['min_lr'])
+
         self.num_epochs = params['epochs']
         self.criterion = nn.KLDivLoss(reduction='none')
         self.train_causality_mask = self.train_data_handler.causality_mask.to(self.device)
@@ -83,8 +91,16 @@ class TractoGNNTrainer(object):
                 progress_bar.set_postfix({'loss': curr_loss,
                                           'acc': acc_top_1.item(),
                                           f'top{self.params["k"]}': acc_top_k.item()})
+                
+        
+        average_loss = total_loss / len(data_loader)
 
-        return total_loss / len(data_loader), acc_top_1, acc_top_k
+        # After debug move to validation
+        if self.params['decay_LR']:
+            self.scheduler.step(average_loss)
+
+
+        return average_loss, acc_top_1.item(), acc_top_k.item()
 
     def validate(self, data_loader):
         self.logger.info("TractoGNNTrainer: Validation phase")
@@ -111,7 +127,9 @@ class TractoGNNTrainer(object):
                 acc_top_1 = torch.sum(correct_top_1 * (~padding_mask)) / lengths.sum()
                 acc_top_k = torch.sum(correct_top_k * (~padding_mask)) / lengths.sum()
 
-        return total_loss / len(data_loader), acc_top_1.item(), acc_top_k.item()
+        average_loss = total_loss / len(data_loader)
+
+        return average_loss, acc_top_1.item(), acc_top_k.item()
 
     def train(self):
         train_stats, val_stats = [], []
@@ -123,9 +141,11 @@ class TractoGNNTrainer(object):
             train_stats.append((train_loss, train_acc, train_acc_top_k))
             val_stats.append((val_loss, val_acc, val_acc_top_k))
 
-            self.logger.info(f'Epoch {epoch + 1}/{self.num_epochs}, Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}, '
-                             f'Val Acc: {val_acc:.4f}, Val Top {self.params["k"]} Acc: {val_acc_top_k:.4f}')
-            if epoch % 2:
+            self.logger.info(f'Epoch {epoch + 1}/{self.num_epochs}, Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f}, Train Acc Topk: {train_acc_top_k:.4f}' 
+                             f'Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}, Val Acc TopK: {val_acc_top_k:.4f}'
+                             f'Learning Rate: {self.optimizer.param_groups[0]["lr"]:.6f}')
+            
+            if epoch % 2 and self.params['save_checkpoints']:
                 torch.save(self.network.state_dict, self.trained_model_path)
 
         torch.save(self.network.state_dict, self.trained_model_path)

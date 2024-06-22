@@ -4,6 +4,7 @@ import logging
 from config import Parameters
 from trainers.trainer import TractoGNNTrainer
 from tracker import Tracker
+from utils.trainer_utils import *
 
 if __name__ == '__main__':
     # Arguments parsing
@@ -32,6 +33,7 @@ if __name__ == '__main__':
         logger.info("Staring training setups")
         trainer = TractoGNNTrainer(logger=logger, params=params)
         train_stats, val_stats = trainer.train()
+        plot_stats(train_stats, val_stats,params['epochs'], 'Learning FODFs')
 
     if False:
         tracker = Tracker(logger=logger, params=params)

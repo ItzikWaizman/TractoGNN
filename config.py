@@ -18,10 +18,10 @@ class Parameters(object):
         self.params['nhead'] = 5
 
         # transformer_feed_forward_dim - Dimension of the feedforward network in TransformerEncoder layer.
-        self.params['transformer_feed_forward_dim'] = 400
+        self.params['transformer_feed_forward_dim'] = 256
 
         # dropout_rate - Probability to execute a dropout
-        self.params['dropout_rate'] = 0.1
+        self.params['dropout_rate'] = 0.0
 
         # max_streamline_len - Upper bound of an expected streamline length. Used for positional encoding.
         self.params['max_streamline_len'] = 150
@@ -33,15 +33,20 @@ class Parameters(object):
         self.params['trained_model_path'] = "trained_model/model.pt"
 
         """ Training Parameters """
+        # save_checkpoints - (bool) Whether to save model checkpoints during training or not
+        self.params['save_checkpoints'] = True
 
         # learning_rate -(float) Initial learning rate in training phase.
-        self.params['learning_rate'] = 7e-4
+        self.params['learning_rate'] = 0.001
+
+        # min_lr - (float) min value of learning rate
+        self.params['min_lr'] = 7e-5
 
         # batch_size - (int) Data batch size for training.
-        self.params['batch_size'] = 500
+        self.params['batch_size'] = 50
 
         # epochs - (int) Number of training epochs.
-        self.params['epochs'] = 10
+        self.params['epochs'] = 700
 
         # top k accuracy computation
         self.params['k'] = 7
@@ -51,13 +56,16 @@ class Parameters(object):
 
         # decay_LR_patience - (int) Number of training epochs to wait in case validation performance does not improve
         # before learning rate decay is applied.
-        self.params['decay_LR_patience'] = 2
+        self.params['decay_LR_patience'] = 75
 
         # decay_factor - (float [0, 1]) In an LR decay step, the existing LR will be multiplied by this factor.
-        self.params['decay_factor'] = 0.6
+        self.params['decay_factor'] = 0.8
 
         # early_stopping - (bool) Whether to use early stopping.
         self.params['early_stopping'] = True
+
+        # threshold - (float) min value of improvement we require between epochs
+        self.params['threshold'] = 0.01
 
         # early_stopping - (int) Number of epochs to wait before training is terminated when validation performance
         # does not improve.
