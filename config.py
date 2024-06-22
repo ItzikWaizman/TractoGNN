@@ -37,7 +37,7 @@ class Parameters(object):
         self.params['save_checkpoints'] = True
         
         # learning_rate - (float) Initial learning rate in training phase.
-        self.params['learning_rate'] = 7e-5
+        self.params['learning_rate'] = 0.001
 
         # batch_size - (int) Data batch size for training.
         self.params['batch_size'] = 50
@@ -53,10 +53,13 @@ class Parameters(object):
 
         # decay_LR_patience - (int) Number of training epochs to wait in case validation performance does not improve
         # before learning rate decay is applied.
-        self.params['decay_LR_patience'] = 2
+        self.params['decay_LR_patience'] = 10
 
         # decay_factor - (float [0, 1]) In an LR decay step, the existing LR will be multiplied by this factor.
-        self.params['decay_factor'] = 0.6
+        self.params['decay_factor'] = 0.5
+
+        # min_lr - (float) the lower limit on learning rate (lr will not be decreased below this threshold)
+        self.params['min_lr'] = 7e-5
 
         # early_stopping - (bool) Whether to use early stopping.
         self.params['early_stopping'] = True

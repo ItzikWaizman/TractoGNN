@@ -23,7 +23,8 @@ class TractoGNNTrainer(object):
                                                               factor=params['decay_factor'],
                                                               patience=params['decay_LR_patience'],
                                                               threshold=params['threshold'],
-                                                              threshold_mode='abs')
+                                                              threshold_mode='abs',
+                                                              min_lr=params['min_lr'])
         self.num_epochs = params['epochs']
         self.criterion = nn.MSELoss(reduction='none')
         self.train_causality_mask = self.train_data_handler.causality_mask.to(self.device)
