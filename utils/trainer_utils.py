@@ -52,3 +52,15 @@ def print_model_parameters(model):
             total_params += num_params
             print(f"{name}: {num_params} parameters")
     print(f"Total number of parameters: {total_params}")
+
+
+def calc_metrics(outputs, labels, valid_mask, k):
+    top1_pred_indices = torch.argmax(outputs, dim=-1)
+    top1_label_indices = torch.argmax(labels, dim=-1)
+    top_k_label_indices = torch.topk(labels, k=k, dim=-1)[1]
+    correct_top_1 = top1_pred_indices == top1_label_indices
+    correct_top_k = torch.any(torch.eq(top1_pred_indices.unsqueeze(-1), top_k_label_indices), dim=-1)
+    acc_top_1 = torch.sum(correct_top_1 * (valid_mask)) / (valid_mask).sum()
+    acc_top_k = torch.sum(correct_top_k * (valid_mask)) / (valid_mask).sum()
+
+    return acc_top_1.item(), acc_top_k.item()

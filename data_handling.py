@@ -54,13 +54,13 @@ class SubjectDataHandler(object):
         return mask
     
     def create_dataloaders(self, batch_size):
-        dataset = StreamlineDataset(self.tractogram, self.lengths, self.inverse_affine, self.mode)
+        dataset = StreamlineDataset(self.dwi, self.tractogram, self.lengths, self.inverse_affine, self.mode)
         data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
         
         return data_loader
 
 class StreamlineDataset(Dataset):
-    def __init__(self, streamlines, lengths, inverse_affine, mode):
+    def __init__(self, dwi, streamlines, lengths, inverse_affine, mode):
         permutation = torch.arange(0, streamlines.size(0)-1)
         permutation = permutation[torch.randperm(permutation.size(0))]
 
@@ -75,6 +75,7 @@ class StreamlineDataset(Dataset):
         EoF[724] = 1
         self.EoF = EoF
         self.inverse_affine = inverse_affine
+        self.dwi = dwi
 
     def __len__(self):
         return len(self.streamlines)
@@ -89,7 +90,8 @@ class StreamlineDataset(Dataset):
         """
         streamline = self.streamlines[idx]
         streamline_voxels = ras_to_voxel(streamline, inverse_affine=self.inverse_affine)
-        seq_length = self.lengths[idx]
-        label = generate_labels(streamline, seq_length, self.sphere_points, self.EoF)
-        padding_mask = torch.arange(streamline.size(0)) >= seq_length
-        return streamline_voxels, label, seq_length, padding_mask
+        labels = generate_labels(streamline, self.lengths[idx], self.sphere_points, self.EoF)
+        ids_sequence = torch.argmax(labels, dim=-1)
+        memory = self.dwi[streamline_voxels[ :, 0], streamline_voxels[:, 1], streamline_voxels[:, 2]]
+        padding_mask = torch.arange(streamline.size(0)) >= self.lengths[idx]
+        return memory, ids_sequence, labels, padding_mask
