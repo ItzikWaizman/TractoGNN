@@ -20,7 +20,7 @@ class SubjectDataHandler(object):
         self.tractogram, self.lengths = prepare_streamlines_for_training(self)
         
         if mode is TRAIN or mode is VALIDATION or TRACK:
-            self.data_loader = self.create_dataloaders(batch_size=params['batch_size'])
+            self.dataset = self.create_dataloaders(batch_size=params['batch_size'])
             self.causality_mask  = torch.triu(torch.ones(self.tractogram.size(1), self.tractogram.size(1)), diagonal=1).bool()
         
     def get_subject_folder(self, mode, params):
@@ -55,9 +55,9 @@ class SubjectDataHandler(object):
     
     def create_dataloaders(self, batch_size):
         dataset = StreamlineDataset(self.tractogram, self.lengths, self.inverse_affine, self.mode)
-        data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
+        #data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
         
-        return data_loader
+        return dataset
 
 class StreamlineDataset(Dataset):
     def __init__(self, streamlines, lengths, inverse_affine, mode):

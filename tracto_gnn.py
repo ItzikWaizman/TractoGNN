@@ -1,19 +1,26 @@
 import os
 import argparse
 import logging
+import torch
+import torch.multiprocessing as mp
+import torch.distributed as dist
 from config import Parameters
 from trainers.trainer import TractoGNNTrainer
 from tracker import Tracker
-from utils.trainer_utils import *
+from utils.trainer_utils import plot_stats
 
-if __name__ == '__main__':
-    # Arguments parsing
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--train', action="store_true", required=False, help='Whether to start training phase')
-    parser.add_argument('--track', action="store_true", required=False, help='Whether to start inference phase')
-    args = parser.parse_args()
+def setup(rank, world_size):
+    os.environ['MASTER_ADDR'] = 'localhost'
+    os.environ['MASTER_PORT'] = '12355'
+    dist.init_process_group("nccl", rank=rank, world_size=world_size)
+    torch.cuda.set_device(rank)
 
-    # Set logger
+def cleanup():
+    dist.destroy_process_group()
+
+def main(rank, world_size, args):
+    setup(rank, world_size)
+
     abs_path = os.path.abspath(__file__)
     dname = os.path.dirname(abs_path)
     log_path = os.path.join(dname, '.log')
@@ -25,16 +32,25 @@ if __name__ == '__main__':
     console.setLevel(logging.INFO)
     logger.addHandler(console)
 
-    # Get parameters 
     params = Parameters().params
-
+    trainer = TractoGNNTrainer(logger=logger, params=params, rank=rank, world_size=world_size)
 
     if True:
-        logger.info("Staring training setups")
-        trainer = TractoGNNTrainer(logger=logger, params=params)
         train_stats, val_stats = trainer.train()
-        plot_stats(train_stats, val_stats, params['epochs'], 'Learning FODFs')
+        if rank == 0 and train_stats is not None:
+            plot_stats(train_stats, val_stats, params['epochs'], 'Learning FODFs')
 
     if False:
-        tracker = Tracker(logger=logger, params=params)
+        tracker = Tracker(logger=logger, params=params, device=rank)
         tracker.track()
+
+    cleanup()
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--train', action="store_true", required=False, help='Whether to start training phase')
+    parser.add_argument('--track', action="store_true", required=False, help='Whether to start inference phase')
+    args = parser.parse_args()
+
+    world_size = torch.cuda.device_count()
+    mp.spawn(main, args=(world_size, args), nprocs=world_size, join=True)

@@ -65,7 +65,7 @@ class Parameters(object):
         self.params['early_stopping'] = True
 
         # threshold - (float) min value of improvement we require between epochs
-        self.params['threshold'] = 0.2
+        self.params['threshold'] = 0.15
 
         # early_stopping - (int) Number of epochs to wait before training is terminated when validation performance
         # does not improve.

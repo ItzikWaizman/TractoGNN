@@ -8,14 +8,22 @@ from models.network import TractoTransformer
 from torch.utils.tensorboard import SummaryWriter
 from data_handling import *
 from utils.trainer_utils import *
+from torch.utils.data import DataLoader, DistributedSampler
+from torch.nn.parallel import DistributedDataParallel as DDP
 
 
 class TractoGNNTrainer(object):
-    def __init__(self, logger, params):
+    def __init__(self, logger, params, rank, world_size):
         logger.info("Create TractoGNNTrainer object")
         self.logger = logger
         self.device = params['device']
+        self.world_size = world_size
+        self.rank = rank
+
         self.network = TractoTransformer(logger=logger, params=params).to(self.device)
+        if self.world_size > 1:
+            self.model = DDP(self.network, device_ids=[rank])
+
         self.train_data_handler = SubjectDataHandler(logger=logger, params=params, mode=TRAIN)
         self.val_data_handler = SubjectDataHandler(logger=logger, params=params, mode=VALIDATION)
         self.train_dwi_data = self.train_data_handler.dwi.to(self.device)
@@ -35,6 +43,12 @@ class TractoGNNTrainer(object):
         self.val_causality_mask = self.val_data_handler.causality_mask.to(self.device)
         self.trained_model_path = params['trained_model_path']
         self.params = params
+
+        train_sampler = DistributedSampler(self.train_data_handler.dataset, num_replicas=self.world_size, rank=self.rank)
+        val_sampler = DistributedSampler(self.val_data_handler.dataset, num_replicas=self.world_size, rank=self.rank)
+        
+        self.train_loader = DataLoader(self.train_data_handler.dataset, batch_size=self.params['batch_size'], sampler=train_sampler, num_workers=4, pin_memory=True)
+        self.val_loader = DataLoader(self.val_data_handler.dataset, batch_size=self.params['batch_size'], sampler=val_sampler, num_workers=4, pin_memory=True)
     
 
     def calc_loss(self, outputs, labels, valid_mask):
@@ -134,46 +148,45 @@ class TractoGNNTrainer(object):
 
 
     def train(self):
-        # Initialize writer
-        log_dir = "logs"
-        stats_path = os.path.join(log_dir, 'train_val_stats.pkl')
-        writer = SummaryWriter(log_dir=log_dir)
-
-        # Log hyperparameters
-        writer.add_hparams(fetch_hyper_params(self.params), {})
-        writer.add_text('FODFs prediction', 'This is an experiment ONE fiber bundle', 0)
+        if self.rank == 0:
+            log_dir = "logs"
+            stats_path = os.path.join(log_dir, 'train_val_stats.pkl')
+            writer = SummaryWriter(log_dir=log_dir)
+            writer.add_hparams(fetch_hyper_params(self.params), {})
+            writer.add_text('FODFs prediction', 'This is an experiment ONE fiber bundle', 0)
 
         train_stats, val_stats = [], []
         for epoch in range(self.num_epochs):
             self.logger.info("TractoGNNTrainer: Training Epoch")
-            train_metrics = self.train_epoch(self.train_data_handler.data_loader)
-            val_metrics = self.validate(self.val_data_handler.data_loader)
+            train_metrics = self.train_epoch(self.train_loader)
+            val_metrics = self.validate(self.val_loader)
 
             # Print epoch message
-            self.logger.info(get_epoch_message(self, train_metrics, val_metrics, epoch))
+            if self.rank == 0:
+                self.logger.info(get_epoch_message(self, train_metrics, val_metrics, epoch))
 
-            # Log metrics
-            for metric_name, metric_value in train_metrics.items():
-                writer.add_scalar(f'Train/{metric_name}', metric_value, epoch)
-        
-            for metric_name, metric_value in val_metrics.items():
-                writer.add_scalar(f'Val/{metric_name}', metric_value, epoch)
-
-            # Log model parameters
-            for name, param in self.network.named_parameters():
-                writer.add_histogram(name, param, epoch)
-                writer.add_histogram(f'{name}.grad', param.grad, epoch)
-
-            # Save statistics
-            train_stats.append((train_metrics['loss'], train_metrics['accuracy_top_1'], train_metrics['accuracy_top_k']))
-            val_stats.append((val_metrics['loss'], val_metrics['accuracy_top_1'], val_metrics['accuracy_top_k']))
+                # Log metrics
+                for metric_name, metric_value in train_metrics.items():
+                    writer.add_scalar(f'Train/{metric_name}', metric_value, epoch)
             
-            # Save checkpoints
-            if self.params['save_checkpoints']:
-                save_checkpoints(self, stats_path, train_stats, val_stats, epoch+1)
+                for metric_name, metric_value in val_metrics.items():
+                    writer.add_scalar(f'Val/{metric_name}', metric_value, epoch)
 
-        
-        save_checkpoints(self, stats_path, train_stats, val_stats, self.num_epochs)
-        writer.flush()
-        writer.close()
+                # Log model parameters
+                for name, param in self.network.named_parameters():
+                    writer.add_histogram(name, param, epoch)
+                    writer.add_histogram(f'{name}.grad', param.grad, epoch)
+
+                # Save statistics
+                train_stats.append((train_metrics['loss'], train_metrics['accuracy_top_1'], train_metrics['accuracy_top_k']))
+                val_stats.append((val_metrics['loss'], val_metrics['accuracy_top_1'], val_metrics['accuracy_top_k']))
+                
+            # Save checkpoints
+                if self.params['save_checkpoints']:
+                    save_checkpoints(self, stats_path, train_stats, val_stats, epoch+1)
+
+        if self.rank == 0:
+            save_checkpoints(self, stats_path, train_stats, val_stats, self.num_epochs)
+            writer.flush()
+            writer.close()
         return train_stats, val_stats
