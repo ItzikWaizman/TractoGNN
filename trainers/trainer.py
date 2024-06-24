@@ -1,10 +1,13 @@
 import torch
 import torch.nn as nn
+import pickle
 from tqdm import tqdm
 from torch.optim import Adam
 import torch.optim as optim
 from models.network import TractoTransformer
+from torch.utils.tensorboard import SummaryWriter
 from data_handling import *
+from utils.trainer_utils import *
 
 
 class TractoGNNTrainer(object):
@@ -18,12 +21,13 @@ class TractoGNNTrainer(object):
         self.train_dwi_data = self.train_data_handler.dwi.to(self.device)
         self.val_dwi_data = self.val_data_handler.dwi.to(self.device)
         self.optimizer = Adam(self.network.parameters(), lr=params['learning_rate'])
-        self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode='max',
+        self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode='min',
                                                               factor=params['decay_factor'],
                                                               patience=params['decay_LR_patience'],
                                                               threshold=params['threshold'],
                                                               threshold_mode='abs',
-                                                              min_lr=params['min_lr'])
+                                                              min_lr=params['min_lr'],
+                                                              cooldown=2)
 
         self.num_epochs = params['epochs']
         self.criterion = nn.KLDivLoss(reduction='none')
@@ -55,13 +59,13 @@ class TractoGNNTrainer(object):
         masked_loss = elementwise_loss * valid_mask.unsqueeze(-1)
         
         # Calculate the average loss per valid sequence element
-        loss = masked_loss.sum()
+        loss = masked_loss.sum() / valid_mask.sum()
 
         return loss
 
     def train_epoch(self, data_loader):
         self.network.train()
-        total_loss = 0
+        total_loss, total_acc_top_1, total_acc_top_k = 0, 0, 0
         with tqdm(data_loader, desc='Training', unit='batch') as progress_bar:
             for streamline_voxels_batch, labels, lengths, padding_mask in progress_bar:
                 labels = labels.to(self.device)
@@ -70,37 +74,36 @@ class TractoGNNTrainer(object):
 
                 # Forward pass
                 outputs = self.network(self.train_dwi_data, streamline_voxels_batch, padding_mask, self.train_causality_mask)
-                loss = self.calc_loss(outputs, labels, ~padding_mask) / lengths.sum()
+                loss = self.calc_loss(outputs, labels, ~padding_mask)
+                acc_top_1, acc_top_k = calc_metrics(outputs, labels, ~padding_mask, self.params['k'])
 
                 # Backward and optimize
                 self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
 
-                curr_loss = loss.item()
                 total_loss += loss.item()
+                total_acc_top_1 += acc_top_1
+                total_acc_top_k += acc_top_k
 
-                top1_pred_indices = torch.argmax(outputs, dim=-1)
-                top1_label_indices = torch.argmax(labels, dim=-1)
-                top_k_label_indices = torch.topk(labels, k=self.params['k'], dim=-1)[1]
-                correct_top_1 = top1_pred_indices == top1_label_indices
-                correct_top_k = torch.any(torch.eq(top1_pred_indices.unsqueeze(-1), top_k_label_indices), dim=-1)
-                acc_top_1 = torch.sum(correct_top_1 * (~padding_mask)) / lengths.sum()
-                acc_top_k = torch.sum(correct_top_k * (~padding_mask)) / lengths.sum()
-
-                progress_bar.set_postfix({'loss': curr_loss,
-                                          'acc': acc_top_1.item(),
-                                          f'top{self.params["k"]}': acc_top_k.item()})
+                progress_bar.set_postfix({'loss': loss.item(),
+                                          'acc': acc_top_1,
+                                          f'top{self.params["k"]}': acc_top_k})
 
 
-        average_loss = total_loss / len(data_loader)
+        train_loss = total_loss / len(data_loader)
+        train_acc_top_1 = total_acc_top_1 / len(data_loader)
+        train_acc_top_k = total_acc_top_k / len(data_loader)
 
-        return average_loss, acc_top_1.item(), acc_top_k.item()
+        return {'loss': train_loss,
+                'accuracy_top_1': train_acc_top_1,
+                'accuracy_top_k': train_acc_top_k 
+                }
 
     def validate(self, data_loader):
         self.logger.info("TractoGNNTrainer: Validation phase")
         self.network.eval()
-        total_loss = 0
+        total_loss, total_acc_top_1, total_acc_top_k = 0, 0, 0
         with torch.no_grad():
             for streamline_voxels_batch, labels, lengths, padding_mask in data_loader:
                 labels = labels.to(self.device)
@@ -109,42 +112,68 @@ class TractoGNNTrainer(object):
 
                 # Forward pass
                 outputs = self.network(self.val_dwi_data, streamline_voxels_batch, padding_mask, self.val_causality_mask)
-                loss = self.calc_loss(outputs, labels, ~padding_mask) / lengths.sum()
+                loss = self.calc_loss(outputs, labels, ~padding_mask)
+                acc_top_1, acc_top_k = calc_metrics(outputs, labels, ~padding_mask, self.params['k'])
 
-                curr_loss = loss.item()
                 total_loss += loss.item()
+                total_acc_top_1 += acc_top_1
+                total_acc_top_k += acc_top_k
 
-                top1_pred_indices = torch.argmax(outputs, dim=-1)
-                top1_label_indices = torch.argmax(labels, dim=-1)
-                top_k_label_indices = torch.topk(labels, k=self.params['k'], dim=-1)[1]
-                correct_top_1 = top1_pred_indices == top1_label_indices
-                correct_top_k = torch.any(torch.eq(top1_pred_indices.unsqueeze(-1), top_k_label_indices), dim=-1)
-                acc_top_1 = torch.sum(correct_top_1 * (~padding_mask)) / lengths.sum()
-                acc_top_k = torch.sum(correct_top_k * (~padding_mask)) / lengths.sum()
 
-        average_loss = total_loss / len(data_loader)
+        val_loss = total_loss / len(data_loader)
+        val_acc_top_1 = total_acc_top_1 / len(data_loader)
+        val_acc_top_k = total_acc_top_k / len(data_loader)
 
         if self.params['decay_LR']:
-            self.scheduler.step(average_loss)
+            self.scheduler.step(val_loss)
 
-        return average_loss, acc_top_1.item(), acc_top_k.item()
+        return {'loss': val_loss,
+                'accuracy_top_1': val_acc_top_1,
+                'accuracy_top_k': val_acc_top_k 
+                }
+
 
     def train(self):
+        # Initialize writer
+        log_dir = "logs"
+        stats_path = os.path.join(log_dir, 'train_val_stats.pkl')
+        writer = SummaryWriter(log_dir=log_dir)
+
+        # Log hyperparameters
+        writer.add_hparams(fetch_hyper_params(self.params), {})
+        writer.add_text('FODFs prediction', 'This is an experiment ONE fiber bundle', 0)
+
         train_stats, val_stats = [], []
         for epoch in range(self.num_epochs):
             self.logger.info("TractoGNNTrainer: Training Epoch")
-            train_loss, train_acc, train_acc_top_k = self.train_epoch(self.train_data_handler.data_loader)
-            val_loss, val_acc, val_acc_top_k = self.validate(self.val_data_handler.data_loader)
+            train_metrics = self.train_epoch(self.train_data_handler.data_loader)
+            val_metrics = self.validate(self.val_data_handler.data_loader)
 
-            train_stats.append((train_loss, train_acc, train_acc_top_k))
-            val_stats.append((val_loss, val_acc, val_acc_top_k))
+            # Print epoch message
+            self.logger.info(get_epoch_message(self, train_metrics, val_metrics, epoch))
 
-            self.logger.info(f'Epoch {epoch + 1}/{self.num_epochs}, Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f}, Train Acc Topk: {train_acc_top_k:.4f}' 
-                             f'Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}, Val Acc TopK: {val_acc_top_k:.4f}'
-                             f'Learning Rate: {self.optimizer.param_groups[0]["lr"]:.6f}')
+            # Log metrics
+            for metric_name, metric_value in train_metrics.items():
+                writer.add_scalar(f'Train/{metric_name}', metric_value, epoch)
+        
+            for metric_name, metric_value in val_metrics.items():
+                writer.add_scalar(f'Val/{metric_name}', metric_value, epoch)
+
+            # Log model parameters
+            for name, param in self.network.named_parameters():
+                writer.add_histogram(name, param, epoch)
+                writer.add_histogram(f'{name}.grad', param.grad, epoch)
+
+            # Save statistics
+            train_stats.append((train_metrics['loss'], train_metrics['accuracy_top_1'], train_metrics['accuracy_top_k']))
+            val_stats.append((val_metrics['loss'], val_metrics['accuracy_top_1'], val_metrics['accuracy_top_k']))
             
-            if epoch % 2 and self.params['save_checkpoints']:
-                torch.save(self.network.state_dict, self.trained_model_path)
+            # Save checkpoints
+            if self.params['save_checkpoints']:
+                save_checkpoints(self, stats_path, train_stats, val_stats, epoch+1)
 
-        torch.save(self.network.state_dict, self.trained_model_path)
+        
+        save_checkpoints(self, stats_path, train_stats, val_stats, self.num_epochs)
+        writer.flush()
+        writer.close()
         return train_stats, val_stats

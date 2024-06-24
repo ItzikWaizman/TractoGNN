@@ -12,16 +12,16 @@ class Parameters(object):
         self.params['num_transformer_encoder_layers'] = 6
 
         # num_transformer_decoder_layers - Number of transformer decoder layers.
-        self.params['num_transformer_decoder_layers'] = 6
+        self.params['num_transformer_decoder_layers'] = 8
 
         # nhead - Number of heads in the Multi Head Self Attention mechanism of the TransformerEncoderLayer.
         self.params['nhead'] = 5
 
         # transformer_feed_forward_dim - Dimension of the feedforward network in TransformerEncoder layer.
-        self.params['transformer_feed_forward_dim'] = 256
+        self.params['transformer_feed_forward_dim'] = 512
 
         # dropout_rate - Probability to execute a dropout
-        self.params['dropout_rate'] = 0.3
+        self.params['dropout_rate'] = 0
 
         # max_streamline_len - Upper bound of an expected streamline length. Used for positional encoding.
         self.params['max_streamline_len'] = 150
@@ -43,10 +43,10 @@ class Parameters(object):
         self.params['min_lr'] = 7e-5
 
         # batch_size - (int) Data batch size for training.
-        self.params['batch_size'] = 50
+        self.params['batch_size'] = 25
 
         # epochs - (int) Number of training epochs.
-        self.params['epochs'] = 50
+        self.params['epochs'] = 100
 
         # top k accuracy computation
         self.params['k'] = 7
@@ -56,16 +56,16 @@ class Parameters(object):
 
         # decay_LR_patience - (int) Number of training epochs to wait in case validation performance does not improve
         # before learning rate decay is applied.
-        self.params['decay_LR_patience'] = 5
+        self.params['decay_LR_patience'] = 3
 
         # decay_factor - (float [0, 1]) In an LR decay step, the existing LR will be multiplied by this factor.
-        self.params['decay_factor'] = 0.8
+        self.params['decay_factor'] = 0.7
 
         # early_stopping - (bool) Whether to use early stopping.
         self.params['early_stopping'] = True
 
         # threshold - (float) min value of improvement we require between epochs
-        self.params['threshold'] = 0.01
+        self.params['threshold'] = 0.2
 
         # early_stopping - (int) Number of epochs to wait before training is terminated when validation performance
         # does not improve.
