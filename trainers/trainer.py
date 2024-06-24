@@ -5,7 +5,6 @@ from torch.optim import Adam
 import torch.optim as optim
 from models.network import TractoTransformer
 from data_handling import *
-from utils.trainer_utils import *
 
 
 class TractoGNNTrainer(object):
@@ -19,7 +18,7 @@ class TractoGNNTrainer(object):
         self.train_dwi_data = self.train_data_handler.dwi.to(self.device)
         self.val_dwi_data = self.val_data_handler.dwi.to(self.device)
         self.optimizer = Adam(self.network.parameters(), lr=params['learning_rate'])
-        self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode='min',
+        self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode='max',
                                                               factor=params['decay_factor'],
                                                               patience=params['decay_LR_patience'],
                                                               threshold=params['threshold'],
@@ -56,80 +55,79 @@ class TractoGNNTrainer(object):
         masked_loss = elementwise_loss * valid_mask.unsqueeze(-1)
         
         # Calculate the average loss per valid sequence element
-        loss = masked_loss.sum() / valid_mask.sum()
+        loss = masked_loss.sum()
 
         return loss
 
     def train_epoch(self, data_loader):
         self.network.train()
-        total_loss, total_acc_top_1, total_acc_top_k = 0, 0, 0
+        total_loss = 0
         with tqdm(data_loader, desc='Training', unit='batch') as progress_bar:
-            for memory, ids_sequences, labels, padding_masks in progress_bar:
+            for streamline_voxels_batch, labels, lengths, padding_mask in progress_bar:
                 labels = labels.to(self.device)
-                ids_sequences = ids_sequences.to(self.device)
-                memory = memory.to(self.device)
-                padding_masks = padding_masks.to(self.device)
+                streamline_voxels_batch = streamline_voxels_batch.to(self.device)
+                padding_mask = padding_mask.to(self.device)
 
                 # Forward pass
-                outputs = self.network(memory, ids_sequences, padding_masks, self.train_causality_mask)
-                loss = self.calc_loss(outputs, labels, ~padding_masks)
+                outputs = self.network(self.train_dwi_data, streamline_voxels_batch, padding_mask, self.train_causality_mask)
+                loss = self.calc_loss(outputs, labels, ~padding_mask) / lengths.sum()
 
                 # Backward and optimize
                 self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
 
-                # Calculate Accuracy
-                acc_top_1, acc_top_k  = calc_metrics(outputs, labels, ~padding_masks, self.params['k']) 
-
-                # Aggregate loss
+                curr_loss = loss.item()
                 total_loss += loss.item()
-                total_acc_top_1 += acc_top_1
-                total_acc_top_k += acc_top_k
-                
-                
-                progress_bar.set_postfix({'loss': loss.item(),
-                                          'acc': acc_top_1,
-                                          f'top{self.params["k"]}': acc_top_k})
+
+                top1_pred_indices = torch.argmax(outputs, dim=-1)
+                top1_label_indices = torch.argmax(labels, dim=-1)
+                top_k_label_indices = torch.topk(labels, k=self.params['k'], dim=-1)[1]
+                correct_top_1 = top1_pred_indices == top1_label_indices
+                correct_top_k = torch.any(torch.eq(top1_pred_indices.unsqueeze(-1), top_k_label_indices), dim=-1)
+                acc_top_1 = torch.sum(correct_top_1 * (~padding_mask)) / lengths.sum()
+                acc_top_k = torch.sum(correct_top_k * (~padding_mask)) / lengths.sum()
+
+                progress_bar.set_postfix({'loss': curr_loss,
+                                          'acc': acc_top_1.item(),
+                                          f'top{self.params["k"]}': acc_top_k.item()})
 
 
         average_loss = total_loss / len(data_loader)
-        average_acc_top_1 = total_acc_top_1 / len(data_loader)
-        average_acc_top_k = total_acc_top_k / len(data_loader)
 
-        return average_loss, average_acc_top_1, average_acc_top_k
+        return average_loss, acc_top_1.item(), acc_top_k.item()
 
     def validate(self, data_loader):
         self.logger.info("TractoGNNTrainer: Validation phase")
         self.network.eval()
-        total_loss, total_acc_top_1, total_acc_top_k = 0, 0, 0
+        total_loss = 0
         with torch.no_grad():
-            for memory, ids_sequences, labels, padding_masks in data_loader:
+            for streamline_voxels_batch, labels, lengths, padding_mask in data_loader:
                 labels = labels.to(self.device)
-                ids_sequences = ids_sequences.to(self.device)
-                memory = memory.to(self.device)
-                padding_masks = padding_masks.to(self.device)
+                streamline_voxels_batch = streamline_voxels_batch.to(self.device)
+                padding_mask = padding_mask.to(self.device)
 
                 # Forward pass
-                outputs = self.network(memory, ids_sequences, padding_masks, self.train_causality_mask)
-                loss = self.calc_loss(outputs, labels, ~padding_masks)
-        
-                # Calculate Accuracy
-                acc_top_1, acc_top_k  = calc_metrics(outputs, labels, ~padding_masks, self.params['k']) 
+                outputs = self.network(self.val_dwi_data, streamline_voxels_batch, padding_mask, self.val_causality_mask)
+                loss = self.calc_loss(outputs, labels, ~padding_mask) / lengths.sum()
 
-                # Aggregate loss
+                curr_loss = loss.item()
                 total_loss += loss.item()
-                total_acc_top_1 += acc_top_1
-                total_acc_top_k += acc_top_k
+
+                top1_pred_indices = torch.argmax(outputs, dim=-1)
+                top1_label_indices = torch.argmax(labels, dim=-1)
+                top_k_label_indices = torch.topk(labels, k=self.params['k'], dim=-1)[1]
+                correct_top_1 = top1_pred_indices == top1_label_indices
+                correct_top_k = torch.any(torch.eq(top1_pred_indices.unsqueeze(-1), top_k_label_indices), dim=-1)
+                acc_top_1 = torch.sum(correct_top_1 * (~padding_mask)) / lengths.sum()
+                acc_top_k = torch.sum(correct_top_k * (~padding_mask)) / lengths.sum()
 
         average_loss = total_loss / len(data_loader)
-        average_acc_top_1 = total_acc_top_1 / len(data_loader)
-        average_acc_top_k = total_acc_top_k / len(data_loader)
 
         if self.params['decay_LR']:
             self.scheduler.step(average_loss)
 
-        return average_loss, average_acc_top_1, average_acc_top_k
+        return average_loss, acc_top_1.item(), acc_top_k.item()
 
     def train(self):
         train_stats, val_stats = [], []
@@ -141,12 +139,11 @@ class TractoGNNTrainer(object):
             train_stats.append((train_loss, train_acc, train_acc_top_k))
             val_stats.append((val_loss, val_acc, val_acc_top_k))
 
-            self.logger.info(f'Epoch {epoch + 1}/{self.num_epochs}, ' 
-                             f'Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f}, Train Acc Topk: {train_acc_top_k:.4f}, ' 
-                             f'Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}, Val Acc TopK: {val_acc_top_k:.4f}, '
+            self.logger.info(f'Epoch {epoch + 1}/{self.num_epochs}, Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f}, Train Acc Topk: {train_acc_top_k:.4f}' 
+                             f'Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}, Val Acc TopK: {val_acc_top_k:.4f}'
                              f'Learning Rate: {self.optimizer.param_groups[0]["lr"]:.6f}')
             
-            if (epoch % 2 == 0) and self.params['save_checkpoints']:
+            if epoch % 2 and self.params['save_checkpoints']:
                 torch.save(self.network.state_dict, self.trained_model_path)
 
         torch.save(self.network.state_dict, self.trained_model_path)

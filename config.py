@@ -26,8 +26,8 @@ class Parameters(object):
         # max_streamline_len - Upper bound of an expected streamline length. Used for positional encoding.
         self.params['max_streamline_len'] = 150
 
-        # num_sphere_directions - (int) number of directions on the sphere which can be chosen as the next direction at each step.
-        self.params['num_sphere_directions'] = 725
+        # output_size - Decoder output features size.
+        self.params['output_size'] = 725
 
         # model_weights_save_dir - (string) Path for saving the model's files after training is done.
         self.params['trained_model_path'] = "trained_model/model.pt"
@@ -46,7 +46,7 @@ class Parameters(object):
         self.params['batch_size'] = 50
 
         # epochs - (int) Number of training epochs.
-        self.params['epochs'] = 25
+        self.params['epochs'] = 50
 
         # top k accuracy computation
         self.params['k'] = 7
@@ -56,16 +56,16 @@ class Parameters(object):
 
         # decay_LR_patience - (int) Number of training epochs to wait in case validation performance does not improve
         # before learning rate decay is applied.
-        self.params['decay_LR_patience'] = 2
+        self.params['decay_LR_patience'] = 5
 
         # decay_factor - (float [0, 1]) In an LR decay step, the existing LR will be multiplied by this factor.
-        self.params['decay_factor'] = 0.7
+        self.params['decay_factor'] = 0.8
 
         # early_stopping - (bool) Whether to use early stopping.
         self.params['early_stopping'] = True
 
         # threshold - (float) min value of improvement we require between epochs
-        self.params['threshold'] = 0.2
+        self.params['threshold'] = 0.01
 
         # early_stopping - (int) Number of epochs to wait before training is terminated when validation performance
         # does not improve.
