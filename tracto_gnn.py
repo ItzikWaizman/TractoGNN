@@ -52,5 +52,6 @@ if __name__ == '__main__':
     parser.add_argument('--track', action="store_true", required=False, help='Whether to start inference phase')
     args = parser.parse_args()
 
-    world_size = torch.cuda.device_count()
+    os.environ["CUDA_VISIBLE_DEVICES"] = "2,3"
+    world_size = min(2, torch.cuda.device_count())
     mp.spawn(main, args=(world_size, args), nprocs=world_size, join=True)

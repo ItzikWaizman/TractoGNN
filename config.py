@@ -15,16 +15,16 @@ class Parameters(object):
         self.params['num_transformer_decoder_layers'] = 8
 
         # nhead - Number of heads in the Multi Head Self Attention mechanism of the TransformerEncoderLayer.
-        self.params['nhead'] = 5
+        self.params['nhead'] = 11
 
         # transformer_feed_forward_dim - Dimension of the feedforward network in TransformerEncoder layer.
         self.params['transformer_feed_forward_dim'] = 512
 
         # dropout_rate - Probability to execute a dropout
-        self.params['dropout_rate'] = 0.1
+        self.params['dropout_rate'] = 0.0
 
         # max_streamline_len - Upper bound of an expected streamline length. Used for positional encoding.
-        self.params['max_streamline_len'] = 150
+        self.params['max_streamline_len'] = 250
 
         # output_size - Decoder output features size.
         self.params['output_size'] = 725
@@ -36,6 +36,9 @@ class Parameters(object):
         # save_checkpoints - (bool) Whether to save model checkpoints during training or not
         self.params['save_checkpoints'] = True
 
+        # checkpoint_path - (string) a path to save the checkpoint
+        self.params['checkpoint_path'] = "trained_model/checkpoint.pth"
+ 
         # learning_rate -(float) Initial learning rate in training phase.
         self.params['learning_rate'] = 0.001
 
@@ -49,7 +52,9 @@ class Parameters(object):
         self.params['epochs'] = 200
 
         # top k accuracy computation
-        self.params['k'] = 7
+        self.params['k1'] = 7
+
+        self.params['k2'] = 4
 
         # decay_LR - (bool) Whether to use learning rate decay.
         self.params['decay_LR'] = True
@@ -59,17 +64,17 @@ class Parameters(object):
         self.params['decay_LR_patience'] = 10
 
         # decay_factor - (float [0, 1]) In an LR decay step, the existing LR will be multiplied by this factor.
-        self.params['decay_factor'] = 0.7
+        self.params['decay_factor'] = 0.8
 
         # early_stopping - (bool) Whether to use early stopping.
         self.params['early_stopping'] = True
 
         # threshold - (float) min value of improvement we require between epochs
-        self.params['threshold'] = 0.15
+        self.params['threshold'] = 0.1
 
         # early_stopping - (int) Number of epochs to wait before training is terminated when validation performance
         # does not improve.
-        self.params['early_stopping_patience'] = 5
+        self.params['early_stopping_patience'] = 20
 
         # train_val_ratio - (float [0, 1]) Training/Validation split ratio for training.
         self.params['train_val_ratio'] = 0.8
@@ -80,13 +85,13 @@ class Parameters(object):
         """ Data Parameters """
 
         # subject_folder - (string) Path to subject folder containing related data
-        self.params['train_subject_folder'] = '/home/itzikwei/tract_inferno_dataset/trainset/sub-1013'
+        self.params['train_subject_folder'] = 'sub-special'#'/home/itzikwei/tract_inferno_dataset/trainset/sub-1013'
 
-        self.params['val_subject_folder'] = '/home/itzikwei/tract_inferno_dataset/validset/sub-1008'
+        self.params['val_subject_folder'] = 'sub-special' #'/home/itzikwei/tract_inferno_dataset/validset/sub-1008'
         
         self.params['test_subject_folder'] = '/home/itzikwei/tract_inferno_dataset/testset/sub-1006'
 
-        self.params['num_of_gradients'] = 100
+        self.params['num_of_gradients'] = 33
         
         """ Tracking parameters """
         # num_seeds - (int) number of initial points to start stracking from.

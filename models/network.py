@@ -82,7 +82,7 @@ class PositionWiseFeedForward(nn.Module):
     
 
 class PositionalEncoding(nn.Module):
-    def __init__(self, d_model, max_len=150):
+    def __init__(self, d_model, max_len=250):
         super(PositionalEncoding, self).__init__()
         encoding = torch.zeros(max_len, d_model)
 
@@ -91,7 +91,7 @@ class PositionalEncoding(nn.Module):
         div_term = (10000 ** (_2i / d_model))
 
         encoding[:, 0::2] = torch.sin(position * div_term)
-        encoding[:, 1::2] = torch.cos(position * div_term)
+        encoding[:, 1::2] = torch.cos(position * div_term)[..., : encoding[:, 1::2].size(-1)]
         
         self.register_buffer('encoding', encoding)
 

@@ -32,25 +32,28 @@ class SubjectDataHandler(object):
             return params['test_subject_folder']
 
     def load_subject_data(self, mode):
-        dwi_sh = nib.load(self.paths_dictionary['sh'])
-        fodf_sh = nib.load(self.paths_dictionary['fodf'])
+        dwi_data = nib.load(self.paths_dictionary['dwi_data'])
+        dwi = torch.tensor(dwi_data.get_fdata(), dtype=torch.float32)
 
-        fa_map = nib.load(self.paths_dictionary['fa'])
-        fa_map = torch.tensor(fa_map.get_fdata(), dtype=torch.float32) if mode is TRACK else None
+        #dwi_sh = nib.load(self.paths_dictionary['sh'])
+        #fodf_sh = nib.load(self.paths_dictionary['fodf'])
 
-        affine = torch.tensor(dwi_sh.affine, dtype=torch.float32)
-        dwi_sh_data = torch.tensor(dwi_sh.get_fdata(), dtype=torch.float32)
-        fodf_sh_data = torch.tensor(fodf_sh.get_fdata(), dtype=torch.float32)
+        #fa_map = nib.load(self.paths_dictionary['fa'])
+        fa_map = None #torch.tensor(fa_map.get_fdata(), dtype=torch.float32) if mode is TRACK else None
 
-        dwi_data = sample_signal_from_sh(dwi_sh_data, sh_order=6, sphere=get_sphere('repulsion100'))
-        fodf_data = sample_signal_from_sh(fodf_sh_data, sh_order=8, sphere=get_sphere('repulsion724')) if mode is TRACK else None
-        return dwi_data, fodf_data, affine, torch.inverse(affine), fa_map
+        affine = torch.tensor(dwi_data.affine, dtype=torch.float32)
+        #dwi_sh_data = torch.tensor(dwi_sh.get_fdata(), dtype=torch.float32)
+        #fodf_sh_data = torch.tensor(fodf_sh.get_fdata(), dtype=torch.float32)
+
+        #dwi_data = sample_signal_from_sh(dwi_sh_data, sh_order=6, sphere=get_sphere('repulsion100'))
+        fodf_data = None #sample_signal_from_sh(fodf_sh_data, sh_order=8, sphere=get_sphere('repulsion724')) if mode is TRACK else None
+        return dwi, fodf_data, affine, torch.inverse(affine), fa_map
 
 
     def load_mask(self):
-        mask_path = self.paths_dictionary['wm_mask']
-        mask = nib.load(mask_path)
-        mask = torch.tensor(mask.get_fdata(), dtype=torch.float32)
+        #mask_path = self.paths_dictionary['wm_mask']
+        #mask = nib.load(mask_path)
+        mask = None #torch.tensor(mask.get_fdata(), dtype=torch.float32)
         return mask
     
     def create_dataloaders(self, batch_size):

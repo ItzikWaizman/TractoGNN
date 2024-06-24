@@ -15,36 +15,37 @@ def extract_subject_paths(subject_folder):
 
     # Extract bvals, bvecs, and dwi_data paths
     dwi_folder = os.path.join(subject_folder, "dwi")
-    dwi_data_path = glob.glob(os.path.join(dwi_folder, "*dwi.nii*"))[0]
+    dwi_data_path = glob.glob(os.path.join(dwi_folder, "*.nii*"))[0]
 
     # Extract white matter mask path
-    mask_folder = os.path.join(subject_folder, "mask")
-    wm_mask_path = glob.glob(os.path.join(mask_folder, "*mask_wm*"))[0]
+    #mask_folder = os.path.join(subject_folder, "mask")
+    #wm_mask_path = glob.glob(os.path.join(mask_folder, "*mask_wm*"))[0]
 
     # Extract fodf
-    fodf_folder = os.path.join(subject_folder, "fodf")
-    fodf_path = glob.glob(os.path.join(fodf_folder, "*fodf*"))[0]
+    #fodf_folder = os.path.join(subject_folder, "fodf")
+    #fodf_path = glob.glob(os.path.join(fodf_folder, "*fodf*"))[0]
 
     # Extract fractional anisotropy
-    fa_folder = os.path.join(subject_folder, "dti")
-    fa_path = glob.glob(os.path.join(fa_folder, "*fa*"))[0]
+    #fa_folder = os.path.join(subject_folder, "dti")
+    #fa_path = glob.glob(os.path.join(fa_folder, "*fa*"))[0]
 
     # Extract tractography folder path
     tractography_folder = os.path.join(subject_folder, "tractography")
 
     # Extract spherical harmonics path
-    sh_folder = os.path.join(subject_folder, "sh")
-    sh_path = glob.glob(os.path.join(sh_folder, "*sh.nii*"))[0]
+    #sh_folder = os.path.join(subject_folder, "sh")
+    #sh_path = glob.glob(os.path.join(sh_folder, "*sh.nii*"))[0]
 
     # Return the extracted paths
     return {
         "dwi_data": dwi_data_path,
-        "wm_mask": wm_mask_path,
         "tractography_folder": tractography_folder,
-        "sh": sh_path,
-        "fodf" : fodf_path,
-        "fa" : fa_path
     }
+        #"wm_mask": wm_mask_path,
+        #"sh": sh_path,
+        #"fodf" : fodf_path,
+        #"fa" : fa_path
+    #}
 
 
 def sample_signal_from_sh(data_sh, sh_order, sphere):
