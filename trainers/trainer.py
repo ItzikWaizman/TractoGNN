@@ -63,7 +63,7 @@ class TractoGNNTrainer(object):
         self.train_loader = DataLoader(train_dataset, batch_size=self.params['batch_size'], sampler=train_sampler, num_workers=4, pin_memory=True)
         self.val_loader = DataLoader(val_dataset, batch_size=self.params['batch_size'], sampler=val_sampler, num_workers=4, pin_memory=True)
 
-        #load_checkpoint(self)
+        load_checkpoint(self)
 
     
     
@@ -174,7 +174,7 @@ class TractoGNNTrainer(object):
     def train(self):
         if self.rank == 0:
             log_dir = "logs"
-            stats_path = os.path.join(log_dir, 'train_val_stats.pkl')
+            stats_path = os.path.join(log_dir, 'train_val_stats_v2.pkl')
             writer = SummaryWriter(log_dir=log_dir)
             writer.add_hparams(fetch_hyper_params(self.params), {})
             writer.add_text('FODFs prediction', 'This is an experiment ONE fiber bundle', 0)
@@ -210,7 +210,7 @@ class TractoGNNTrainer(object):
                     save_checkpoints(self, stats_path, train_stats, val_stats, epoch)
 
         if self.rank == 0:
-            save_checkpoints(self, stats_path, train_stats, val_stats, epoch)
+            save_checkpoints(self, stats_path, train_stats, val_stats, epoch+1)
             writer.flush()
             writer.close()
         return train_stats, val_stats

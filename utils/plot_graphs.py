@@ -1,7 +1,7 @@
 from trainer_utils import *
 import sys
 
-def plot_graphs(file_path):
+def plot_graphs(file_path='/home/itzikwei/TractoGNN_Project/TractoGNN/logs/train_val_stats.pkl'):
     train_stats, val_stats, num_epochs = load_stats(file_path)
     plot_stats(train_stats, val_stats, num_epochs, 'FODFs prediction')
 
@@ -11,4 +11,5 @@ if __name__ == "__main__":
         sys.exit(1)
 
     file_path = sys.argv[1]
-    plot_graphs(file_path)    
+    plot_graphs(file_path)
+

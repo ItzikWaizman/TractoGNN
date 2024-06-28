@@ -109,7 +109,7 @@ def get_epoch_message(trainer, train_metrics, val_metrics, epoch):
                f'Train Loss: {train_metrics["loss"]:.4f}, '
                f'Train Acc: {train_metrics["accuracy_top_1"]:.4f}, '
                f'Train Acc Top{trainer.params["k1"]}: {train_metrics["accuracy_top_k1"]:.4f}, '
-               f'Train Acc Top{trainer.params["k2"]}: {train_metrics["accuracy_top_k1"]:.4f}, '
+               f'Train Acc Top{trainer.params["k2"]}: {train_metrics["accuracy_top_k2"]:.4f}, '
                f'Val Loss: {val_metrics["loss"]:.4f}, '
                f'Val Acc: {val_metrics["accuracy_top_1"]:.4f}, '
                f'Val Acc Top{trainer.params["k1"]}: {val_metrics["accuracy_top_k1"]:.4f}, '

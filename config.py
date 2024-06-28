@@ -15,7 +15,7 @@ class Parameters(object):
         self.params['num_transformer_decoder_layers'] = 8
 
         # nhead - Number of heads in the Multi Head Self Attention mechanism of the TransformerEncoderLayer.
-        self.params['nhead'] = 11
+        self.params['nhead'] = 13
 
         # transformer_feed_forward_dim - Dimension of the feedforward network in TransformerEncoder layer.
         self.params['transformer_feed_forward_dim'] = 512
@@ -46,10 +46,10 @@ class Parameters(object):
         self.params['min_lr'] = 7e-5
 
         # batch_size - (int) Data batch size for training.
-        self.params['batch_size'] = 50
+        self.params['batch_size'] = 100
 
         # epochs - (int) Number of training epochs.
-        self.params['epochs'] = 200
+        self.params['epochs'] = 500
 
         # top k accuracy computation
         self.params['k1'] = 7
@@ -85,13 +85,13 @@ class Parameters(object):
         """ Data Parameters """
 
         # subject_folder - (string) Path to subject folder containing related data
-        self.params['train_subject_folder'] = 'sub-special'#'/home/itzikwei/tract_inferno_dataset/trainset/sub-1013'
+        self.params['train_subject_folder'] = '/home/itzikwei/tract_inferno_dataset/trainset/sub-1054'#'/home/itzikwei/tract_inferno_dataset/trainset/sub-1013'
 
-        self.params['val_subject_folder'] = 'sub-special' #'/home/itzikwei/tract_inferno_dataset/validset/sub-1008'
+        self.params['val_subject_folder'] = '/home/itzikwei/tract_inferno_dataset/trainset/sub-1054' #'/home/itzikwei/tract_inferno_dataset/validset/sub-1008'
         
         self.params['test_subject_folder'] = '/home/itzikwei/tract_inferno_dataset/testset/sub-1006'
 
-        self.params['num_of_gradients'] = 33
+        self.params['num_of_gradients'] = 65
         
         """ Tracking parameters """
         # num_seeds - (int) number of initial points to start stracking from.

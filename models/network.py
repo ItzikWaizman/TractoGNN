@@ -3,7 +3,6 @@ import torch.nn.functional as F
 from torch.nn import TransformerEncoder, TransformerEncoderLayer, TransformerDecoderLayer, TransformerDecoder
 from utils.model_utils import *
 
-
 class TractoTransformer(nn.Module):
     def __init__(self, logger, params):
         super(TractoTransformer, self).__init__()
